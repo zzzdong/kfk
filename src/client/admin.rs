@@ -1,16 +1,15 @@
 use kafka_client::protocol::create_topics_request::CreatableTopic;
 use kafka_client::protocol::delete_topics_request::{DeleteTopicState, DeleteTopicsRequest};
 use kafka_client::protocol::{
-    CreateTopicsRequest, DescribeGroupsRequest, DescribeGroupsResponse,
-    FindCoordinatorRequest, FindCoordinatorResponse, ListGroupsRequest, ListGroupsResponse,
-    ListOffsetsPartition, ListOffsetsRequest, ListOffsetsTopic,
+    CreateTopicsRequest, DescribeGroupsRequest, DescribeGroupsResponse, FindCoordinatorRequest,
+    FindCoordinatorResponse, ListGroupsRequest, ListGroupsResponse,
 };
 use kafka_client::{ClusterClient, KafkaClient, PartitionRouting, Producer, ProducerConfig};
 use std::sync::Arc;
 use std::time::Duration;
 
-use super::types::*;
 use super::CliResult;
+use super::types::*;
 
 /// AdminClient wraps cluster operations for CLI usage
 pub struct AdminClient {
@@ -189,7 +188,7 @@ impl AdminClient {
             }
         }
 
-        result.sort_by(|a, b| a.id.cmp(&b.id));
+        result.sort_by_key(|a| a.id);
         Ok(result)
     }
 

@@ -1,0 +1,89 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            ext: tar.gz
+            archive: tar czf
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            ext: zip
+            archive: 7z a -tzip
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install musl tools (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+
+      - name: Install Rust target
+        run: rustup target add ${{ matrix.target }}
+
+      - name: Build release
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Prepare archive
+        shell: bash
+        run: |
+          cd target/${{ matrix.target }}/release
+          case "${{ matrix.ext }}" in
+            tar.gz)
+              tar czf kfk-${{ matrix.target }}.tar.gz kfk${{ matrix.target == 'x86_64-pc-windows-msvc' && '.exe' || '' }}
+              ;;
+            zip)
+              7z a -tzip kfk-${{ matrix.target }}.zip kfk.exe
+              ;;
+          esac
+          mkdir -p /tmp/artifacts
+          mv kfk-${{ matrix.target }}.${{ matrix.ext }} /tmp/artifacts/
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: kfk-${{ matrix.target }}
+          path: /tmp/artifacts/kfk-${{ matrix.target }}.${{ matrix.ext }}
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/artifacts
+
+      - name: Generate checksums
+        run: |
+          cd /tmp/artifacts
+          find . -type f -name '*.tar.gz' -o -name '*.zip' | while read f; do
+            sha256sum "$f" >> checksums.txt
+          done
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Release ${{ github.ref_name }}
+          body_path: CHANGELOG.md
+          fail_on_unmatched_files: false
+          files: |
+            /tmp/artifacts/**/*

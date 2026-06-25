@@ -1,10 +1,20 @@
 [package]
 name = "kfk"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
+rust-version = "1.85"
+authors = ["zzzdong <kuwater@163.com>"]
+description = "A pure Rust Kafka CLI tool for cluster management, topic operations, and message produce/consume"
+documentation = "https://docs.rs/kfk"
+homepage = "https://github.com/zzdong/kfk"
+repository = "https://github.com/zzdong/kfk.git"
+readme = "README.md"
+license = "MIT OR Apache-2.0"
+keywords = ["kafka", "cli", "kafka-client", "kafka-admin"]
+categories = ["command-line-utilities", "database"]
 
 [dependencies]
-kafka_client = { path = "../kafka_client" }
+kafka_client = "0.1.0"
 clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
 serde = { version = "1", features = ["derive"] }
@@ -18,3 +28,9 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 dirs = "6"
 bytes = "1"
 uuid = { version = "1", features = ["v4"] }
+
+[profile.release]
+opt-level = 2
+lto = "thin"
+codegen-units = 1
+strip = "symbols"

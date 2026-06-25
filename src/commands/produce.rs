@@ -38,8 +38,7 @@ async fn produce_impl(args: ProduceArgs, admin: AdminClient) -> CliResult<()> {
             continue;
         }
 
-        let mut record =
-            ProducerRecord::new(&args.topic, Bytes::copy_from_slice(value.as_bytes()));
+        let mut record = ProducerRecord::new(&args.topic, Bytes::copy_from_slice(value.as_bytes()));
 
         if let Some(key) = &args.key {
             record = record.with_key(Bytes::copy_from_slice(key.as_bytes()));

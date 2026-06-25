@@ -1,11 +1,16 @@
-use std::collections::HashMap;
-
 use crate::cli::args::ConfigAction;
 use crate::cli::output;
 use crate::config::{
-    load_config, save_config, ClusterConfig, SaslConfig, SaslMechanism, SecurityProtocolType,
-    TlsConfig,
+    ClusterConfig, SaslConfig, SaslMechanism, SecurityProtocolType, TlsConfig, load_config,
+    save_config,
 };
+
+struct TlsCliArgs {
+    enabled: bool,
+    ca: Option<String>,
+    cert: Option<String>,
+    key: Option<String>,
+}
 
 pub async fn handle_config(action: ConfigAction) {
     match action {
@@ -27,10 +32,12 @@ pub async fn handle_config(action: ConfigAction) {
             sasl_mechanism,
             sasl_username,
             sasl_password,
-            tls,
-            tls_ca,
-            tls_cert,
-            tls_key,
+            TlsCliArgs {
+                enabled: tls,
+                ca: tls_ca,
+                cert: tls_cert,
+                key: tls_key,
+            },
         ),
         ConfigAction::RemoveCluster { name } => remove_cluster(&name),
         ConfigAction::SelectCluster { name } => select_cluster(&name),
@@ -45,10 +52,7 @@ fn add_cluster(
     sasl_mechanism: Option<String>,
     sasl_username: Option<String>,
     sasl_password: Option<String>,
-    tls: bool,
-    tls_ca: Option<String>,
-    tls_cert: Option<String>,
-    tls_key: Option<String>,
+    tls: TlsCliArgs,
 ) {
     let mut config = load_config();
 
@@ -75,19 +79,20 @@ fn add_cluster(
         _ => None,
     };
 
-    let tls_cfg = if tls || sp == SecurityProtocolType::Ssl || sp == SecurityProtocolType::SaslSsl
-    {
-        Some(TlsConfig {
-            insecure: false,
-            ca_file: tls_ca,
-            cert_file: tls_cert,
-            key_file: tls_key,
-        })
-    } else {
-        None
-    };
+    let tls_cfg =
+        if tls.enabled || sp == SecurityProtocolType::Ssl || sp == SecurityProtocolType::SaslSsl {
+            Some(TlsConfig {
+                insecure: false,
+                ca_file: tls.ca,
+                cert_file: tls.cert,
+                key_file: tls.key,
+            })
+        } else {
+            None
+        };
 
-    let broker_list: Vec<String> = brokers.split(|c: char| c == ',' || c == ' ')
+    let broker_list: Vec<String> = brokers
+        .split([',', ' '])
         .filter(|s| !s.is_empty())
         .map(|s| s.trim().to_string())
         .collect();
@@ -157,8 +162,8 @@ fn list_clusters() {
     let mut clusters: Vec<(&String, &ClusterConfig)> = config.clusters.iter().collect();
     clusters.sort_by(|a, b| a.0.cmp(b.0));
 
-    println!("{}", "CLUSTERS");
-    println!("{}", "───────");
+    println!("CLUSTERS");
+    println!("───────");
     for (name, cfg) in &clusters {
         let active = if *name == current { " ◄" } else { "" };
         let auth = if cfg.sasl.is_some() { " (SASL)" } else { "" };

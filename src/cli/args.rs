@@ -16,6 +16,42 @@ pub struct Cli {
     #[arg(short, long)]
     pub verbose: bool,
 
+    /// Security protocol: PLAINTEXT | SSL | SASL_PLAINTEXT | SASL_SSL
+    #[arg(long, default_value = "PLAINTEXT")]
+    pub security_protocol: String,
+
+    /// SASL mechanism: PLAIN | SCRAM-SHA-256 | SCRAM-SHA-512
+    #[arg(long)]
+    pub sasl_mechanism: Option<String>,
+
+    /// SASL username
+    #[arg(long)]
+    pub sasl_username: Option<String>,
+
+    /// SASL password
+    #[arg(long)]
+    pub sasl_password: Option<String>,
+
+    /// Enable TLS
+    #[arg(long)]
+    pub tls: bool,
+
+    /// TLS CA file path
+    #[arg(long)]
+    pub tls_ca: Option<String>,
+
+    /// TLS cert file path
+    #[arg(long)]
+    pub tls_cert: Option<String>,
+
+    /// TLS key file path
+    #[arg(long)]
+    pub tls_key: Option<String>,
+
+    /// Disable TLS certificate verification (insecure)
+    #[arg(long)]
+    pub tls_insecure: bool,
+
     #[command(subcommand)]
     pub command: Commands,
 }
@@ -53,15 +89,11 @@ pub enum Commands {
     },
 
     /// Generate shell completion script
-    Completion {
-        shell: clap_complete::Shell,
-    },
+    Completion { shell: clap_complete::Shell },
 
     /// Generate shell completion script (hidden, for clap_complete integration)
     #[command(hide = true)]
-    Completions {
-        shell: clap_complete::Shell,
-    },
+    Completions { shell: clap_complete::Shell },
 }
 
 #[derive(Args, Clone, Debug)]
@@ -161,14 +193,10 @@ pub enum ConfigAction {
     },
 
     /// Remove a cluster configuration
-    RemoveCluster {
-        name: String,
-    },
+    RemoveCluster { name: String },
 
     /// Select the active cluster
-    SelectCluster {
-        name: String,
-    },
+    SelectCluster { name: String },
 
     /// List all configured clusters (default)
     List,
@@ -186,9 +214,7 @@ pub enum TopicAction {
     Ls,
 
     /// Describe a topic
-    Describe {
-        topic: String,
-    },
+    Describe { topic: String },
 
     /// Create a topic
     Create {
@@ -204,9 +230,7 @@ pub enum TopicAction {
     },
 
     /// Delete a topic
-    Delete {
-        topic: String,
-    },
+    Delete { topic: String },
 }
 
 #[derive(Subcommand, Debug)]
@@ -243,13 +267,13 @@ pub enum GroupAction {
     },
 
     /// Delete a consumer group
-    Delete {
-        group: String,
-    },
+    Delete { group: String },
 }
 
 /// Parse key:value pairs
 fn parse_key_val(s: &str) -> Result<(String, String), String> {
-    let pos = s.find(':').ok_or_else(|| format!("Invalid KEY:VALUE format: {s}"))?;
+    let pos = s
+        .find(':')
+        .ok_or_else(|| format!("Invalid KEY:VALUE format: {s}"))?;
     Ok((s[..pos].to_string(), s[pos + 1..].to_string()))
 }

@@ -3,6 +3,7 @@ use serde::Serialize;
 
 /// Output format
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[allow(dead_code)]
 pub enum OutputFormat {
     Table,
     Json,
@@ -30,6 +31,7 @@ pub fn print_items<T: Serialize + TableRow>(items: &[T], format: OutputFormat) {
 }
 
 /// Print a single item
+#[allow(dead_code)]
 pub fn print_item<T: Serialize + TableRow>(item: &T, format: OutputFormat) {
     match format {
         OutputFormat::Table => {

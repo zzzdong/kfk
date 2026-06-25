@@ -586,7 +586,9 @@ dependencies = [
 
 [[package]]
 name = "kafka-client-protocol"
-version = "0.1.0-beta"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "201376bc92dee0b76b566d619dd6fa22589df67a1d0f1ef176cbcd5b83410683"
 dependencies = [
  "bytes",
  "kafka-client-protocol-core",
@@ -596,7 +598,9 @@ dependencies = [
 
 [[package]]
 name = "kafka-client-protocol-core"
-version = "0.1.0-beta"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6fb11805faf69ce90927704af62fc78d4bb28569cb9d0531027d5ab4796c6de9"
 dependencies = [
  "bytes",
  "crc32c",
@@ -608,7 +612,9 @@ dependencies = [
 
 [[package]]
 name = "kafka-client-protocol-derive"
-version = "0.1.0-beta"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d146fb1df11d82fb1051a0a7cad95ff07dce4ba4a12610d315616d92467de471"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -617,7 +623,9 @@ dependencies = [
 
 [[package]]
 name = "kafka_client"
-version = "0.1.0-beta"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3800f55ccc29b731aa4ddffad0a78ce0208c37ade7979660714c25f520832c85"
 dependencies = [
  "async-trait",
  "base64",

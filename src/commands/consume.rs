@@ -1,6 +1,6 @@
 use crate::cli::args::ConsumeArgs;
 use crate::cli::output;
-use crate::client::{create_consumer, AdminClient, CliResult};
+use crate::client::{AdminClient, CliResult, create_consumer};
 use std::time::Duration;
 
 pub async fn handle_consume(args: ConsumeArgs, admin: AdminClient) {

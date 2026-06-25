@@ -1,11 +1,12 @@
 mod cli;
-mod commands;
 mod client;
+mod commands;
 mod config;
 
 use clap::Parser;
 use cli::args::{Cli, Commands};
-use client::{create_client, AdminClient};
+use client::{AdminClient, create_client};
+use config::ClusterCliParams;
 use config::resolve_cluster;
 
 #[tokio::main]
@@ -14,9 +15,7 @@ async fn main() {
 
     // Initialize logging if verbose
     if cli.verbose {
-        let _ = tracing_subscriber::fmt()
-            .with_env_filter("info")
-            .try_init();
+        let _ = tracing_subscriber::fmt().with_env_filter("info").try_init();
     }
 
     // Handle config command separately (doesn't need a cluster connection)
@@ -36,10 +35,19 @@ async fn main() {
     }
 
     // For all other commands, create a cluster connection
-    let cluster_result = resolve_cluster(
-        cli.cluster.as_deref(),
-        cli.brokers.as_deref(),
-    );
+    let cli_params = ClusterCliParams {
+        security_protocol: cli.security_protocol,
+        mechanism: cli.sasl_mechanism,
+        username: cli.sasl_username,
+        password: cli.sasl_password,
+        tls_enabled: cli.tls,
+        tls_ca: cli.tls_ca,
+        tls_cert: cli.tls_cert,
+        tls_key: cli.tls_key,
+        tls_insecure: cli.tls_insecure,
+    };
+    let cluster_result =
+        resolve_cluster(cli.cluster.as_deref(), cli.brokers.as_deref(), &cli_params);
 
     match cluster_result {
         Ok((_, cluster_cfg)) => {
