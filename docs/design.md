@@ -89,12 +89,12 @@ kfk [--brokers <BROKERS>] [--cluster <CLUSTER>] [--verbose]
 │   [--key <KEY>]
 │   [--partition <PARTITION>]
 │   [--header <K:V>]
-│   [--input <FORMAT>]          #   输入格式：text | json-each-row
+│   [--input <FORMAT>]          #   输入格式：text | json
 │   <TOPIC>                     #   从 stdin 读取消息
 │
 ├── consume                     # 消费消息
 │   [--group <GROUP>]
-│   [--output <FORMAT>]         #   输出格式：text | json-each-row
+│   [--output <FORMAT>]         #   输出格式：text | pretty
 │   [--offset <earliest|latest|N>]
 │   [--partition <PARTITION>]
 │   [--header <K:V>]            #   按 header 过滤
@@ -405,7 +405,7 @@ $ kfk topic describe example-topic
 ### 10.3 消费输出格式
 
 - `text` — 默认，仅打印消息 value
-- `json-each-row` — 每行一个 JSON 对象（含元数据）
+- `pretty` — 格式化 JSON 输出，带语法着色
 
 ---
 

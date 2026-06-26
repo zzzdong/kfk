@@ -4,7 +4,7 @@ use kafka_client::protocol::{
     CreateTopicsRequest, DescribeGroupsRequest, DescribeGroupsResponse, FindCoordinatorRequest,
     FindCoordinatorResponse, ListGroupsRequest, ListGroupsResponse,
 };
-use kafka_client::{ClusterClient, KafkaClient, PartitionRouting, Producer, ProducerConfig};
+use kafka_client::{ClusterClient, KafkaClient, Producer, ProducerConfig};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -30,14 +30,12 @@ impl AdminClient {
 
     /// Create a producer from this client
     pub async fn create_producer(&self) -> Result<Producer, kafka_client::KafkaError> {
-        let config = ProducerConfig {
-            acks: 1,
-            timeout_ms: 5000,
-            routing: PartitionRouting::default(),
-            retries: 3,
-            batch_size: 16384,
-            linger_ms: 50,
-        };
+        let config = ProducerConfig::new()
+            .with_acks(1)
+            .with_timeout(5000)
+            .with_retries(3)
+            .with_batch_size(16384)
+            .with_linger(50);
         self.client.producer(config).await
     }
 

@@ -2,9 +2,7 @@ use std::net::ToSocketAddrs;
 use std::time::Duration;
 
 use kafka_client::SaslMechanismType;
-use kafka_client::{
-    AutoOffsetReset, ConsumerConfig, KafkaClient, PartitionRouting, ProducerConfig, TlsConfig,
-};
+use kafka_client::{AutoOffsetReset, ConsumerConfig, KafkaClient, ProducerConfig, TlsConfig};
 
 use crate::config::{ClusterConfig, SecurityProtocolType};
 
@@ -63,34 +61,30 @@ pub async fn create_consumer(
     group_id: &str,
     offset: AutoOffsetReset,
 ) -> CliResult<kafka_client::Consumer> {
-    let config = ConsumerConfig {
-        group_id: group_id.to_string(),
-        auto_commit: true,
-        auto_commit_interval: Duration::from_millis(5000),
-        auto_offset_reset: offset,
-        min_bytes: 1,
-        max_bytes: 10 * 1024 * 1024,
-        partition_max_bytes: 1024 * 1024,
-        max_wait: Duration::from_millis(1000),
-        session_timeout: Duration::from_millis(45000),
-        rebalance_timeout: Duration::from_millis(60000),
-        heartbeat_interval: Duration::from_millis(3000),
-        partition_assignment_strategy: kafka_client::PartitionAssignmentStrategy::Range,
-    };
+    let config = ConsumerConfig::new(group_id.to_string())
+        .with_auto_commit(true)
+        .with_auto_commit_interval(Duration::from_millis(5000))
+        .with_auto_offset_reset(offset)
+        .with_min_bytes(1)
+        .with_max_bytes(10 * 1024 * 1024)
+        .with_partition_max_bytes(1024 * 1024)
+        .with_max_wait(Duration::from_millis(1000))
+        .with_session_timeout(Duration::from_millis(45000))
+        .with_rebalance_timeout(Duration::from_millis(60000))
+        .with_heartbeat_interval(Duration::from_millis(3000))
+        .with_assignment_strategy(kafka_client::PartitionAssignmentStrategy::Range);
     Ok(client.consumer(config))
 }
 
 /// Create a producer
 #[allow(dead_code)]
 pub async fn create_producer(client: &KafkaClient) -> CliResult<kafka_client::Producer> {
-    let config = ProducerConfig {
-        acks: 1,
-        timeout_ms: 5000,
-        routing: PartitionRouting::default(),
-        retries: 3,
-        batch_size: 16384,
-        linger_ms: 50,
-    };
+    let config = ProducerConfig::new()
+        .with_acks(1)
+        .with_timeout(5000)
+        .with_retries(3)
+        .with_batch_size(16384)
+        .with_linger(50);
     client
         .producer(config)
         .await

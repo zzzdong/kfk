@@ -66,7 +66,7 @@ echo "hello world" | kfk --brokers localhost:9092 produce my-topic
 
 # JSON input
 echo '{"key":"user1","message":"login event"}' | \
-  kfk --brokers localhost:9092 produce my-topic --input json-each-row
+  kfk --brokers localhost:9092 produce my-topic --input json
 
 # With explicit key
 echo "message with key" | \

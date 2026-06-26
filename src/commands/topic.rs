@@ -1,3 +1,7 @@
+use std::collections::HashMap;
+
+use serde::Serialize;
+
 use crate::cli::args::TopicAction;
 use crate::cli::output::{self, TableRow};
 use crate::client::{AdminClient, CliResult, PartitionInfo, TopicInfo};
@@ -29,9 +33,25 @@ async fn list_topics(admin: AdminClient) -> CliResult<()> {
 
 async fn describe_topic(topic: &str, admin: AdminClient) -> CliResult<()> {
     let detail = admin.describe_topic(topic).await?;
+    let brokers = admin.list_brokers().await?;
     admin.close().await?;
+
+    // Build broker ID → "host:port" lookup
+    let broker_map: HashMap<i32, String> = brokers
+        .iter()
+        .map(|b| (b.id, format!("{}:{}", b.host, b.port)))
+        .collect();
+
     println!("Topic: {}\n", detail.name);
-    output::print_items(&detail.partitions, output::OutputFormat::Table);
+    let rows: Vec<PartitionRow> = detail
+        .partitions
+        .iter()
+        .map(|p| PartitionRow {
+            info: p.clone(),
+            broker_map: broker_map.clone(),
+        })
+        .collect();
+    output::print_items(&rows, output::OutputFormat::Table);
     Ok(())
 }
 
@@ -75,7 +95,13 @@ impl TableRow for TopicInfo {
     }
 }
 
-impl TableRow for PartitionInfo {
+#[derive(Serialize)]
+struct PartitionRow {
+    info: PartitionInfo,
+    broker_map: HashMap<i32, String>,
+}
+
+impl TableRow for PartitionRow {
     fn headers(&self) -> Vec<String> {
         vec![
             "ID".to_string(),
@@ -85,11 +111,35 @@ impl TableRow for PartitionInfo {
         ]
     }
     fn row(&self) -> Vec<String> {
+        let addr = |id: i32| {
+            self.broker_map
+                .get(&id)
+                .map(|s| s.as_str())
+                .unwrap_or("?")
+                .to_string()
+        };
+        let replicas: Vec<String> = self
+            .info
+            .replicas
+            .iter()
+            .map(|b| {
+                if *b == self.info.leader {
+                    format!("{}({})*", b, addr(*b))
+                } else {
+                    format!("{}({})", b, addr(*b))
+                }
+            })
+            .collect();
         vec![
-            self.id.to_string(),
-            self.leader.to_string(),
-            format!("{:?}", self.replicas),
-            format!("{:?}", self.isr),
+            self.info.id.to_string(),
+            format!("{}({})", self.info.leader, addr(self.info.leader)),
+            replicas.join(", "),
+            self.info
+                .isr
+                .iter()
+                .map(|b| format!("{}({})", b, addr(*b)))
+                .collect::<Vec<_>>()
+                .join(", "),
         ]
     }
 }

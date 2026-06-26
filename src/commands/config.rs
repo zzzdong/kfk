@@ -28,7 +28,7 @@ pub async fn handle_config(action: ConfigAction) {
         } => add_cluster(
             &name,
             &brokers,
-            &security_protocol,
+            security_protocol,
             sasl_mechanism,
             sasl_username,
             sasl_password,
@@ -48,48 +48,36 @@ pub async fn handle_config(action: ConfigAction) {
 fn add_cluster(
     name: &str,
     brokers: &str,
-    security_protocol: &str,
-    sasl_mechanism: Option<String>,
+    security_protocol: SecurityProtocolType,
+    sasl_mechanism: Option<SaslMechanism>,
     sasl_username: Option<String>,
     sasl_password: Option<String>,
     tls: TlsCliArgs,
 ) {
     let mut config = load_config();
 
-    let sp = match security_protocol.to_uppercase().as_str() {
-        "SSL" => SecurityProtocolType::Ssl,
-        "SASL_PLAINTEXT" => SecurityProtocolType::SaslPlaintext,
-        "SASL_SSL" => SecurityProtocolType::SaslSsl,
-        _ => SecurityProtocolType::Plaintext,
-    };
-
     let sasl = match (sasl_mechanism, sasl_username, sasl_password) {
-        (Some(m), Some(u), Some(p)) => {
-            let mechanism = match m.to_uppercase().as_str() {
-                "SCRAM-SHA-256" => SaslMechanism::ScramSha256,
-                "SCRAM-SHA-512" => SaslMechanism::ScramSha512,
-                _ => SaslMechanism::Plain,
-            };
-            Some(SaslConfig {
-                mechanism,
-                username: u,
-                password: p,
-            })
-        }
+        (Some(m), Some(u), Some(p)) => Some(SaslConfig {
+            mechanism: m,
+            username: u,
+            password: p,
+        }),
         _ => None,
     };
 
-    let tls_cfg =
-        if tls.enabled || sp == SecurityProtocolType::Ssl || sp == SecurityProtocolType::SaslSsl {
-            Some(TlsConfig {
-                insecure: false,
-                ca_file: tls.ca,
-                cert_file: tls.cert,
-                key_file: tls.key,
-            })
-        } else {
-            None
-        };
+    let tls_cfg = if tls.enabled
+        || security_protocol == SecurityProtocolType::Ssl
+        || security_protocol == SecurityProtocolType::SaslSsl
+    {
+        Some(TlsConfig {
+            insecure: false,
+            ca_file: tls.ca,
+            cert_file: tls.cert,
+            key_file: tls.key,
+        })
+    } else {
+        None
+    };
 
     let broker_list: Vec<String> = brokers
         .split([',', ' '])
@@ -106,7 +94,7 @@ fn add_cluster(
         name.to_string(),
         ClusterConfig {
             brokers: broker_list,
-            security_protocol: sp,
+            security_protocol,
             sasl,
             tls: tls_cfg,
         },

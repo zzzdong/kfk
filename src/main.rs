@@ -4,7 +4,7 @@ mod commands;
 mod config;
 
 use clap::Parser;
-use cli::args::{Cli, Commands};
+use cli::args::{Cli, Commands, TopicAction};
 use client::{AdminClient, create_client};
 use config::ClusterCliParams;
 use config::resolve_cluster;
@@ -13,28 +13,35 @@ use config::resolve_cluster;
 async fn main() {
     let cli = Cli::parse();
 
-    // Initialize logging if verbose
-    if cli.verbose {
-        let _ = tracing_subscriber::fmt().with_env_filter("info").try_init();
+    // Initialize logging based on verbosity level
+    // -v: warn, -vv: info, -vvv: debug, -vvvv: trace
+    {
+        let level = match cli.verbose {
+            0 => "", // no logging (error! still shows via stderr)
+            1 => "warn",
+            2 => "info",
+            3 => "debug",
+            _ => "trace",
+        };
+        if !level.is_empty() {
+            let _ = tracing_subscriber::fmt().with_env_filter(level).try_init();
+        }
     }
 
-    // Handle config command separately (doesn't need a cluster connection)
-    if let Commands::Config { action } = &cli.command {
-        commands::config::handle_config(action.clone()).await;
-        return;
+    // Dispatch commands, some don't need a cluster connection
+    match &cli.command {
+        Commands::Config { action } => {
+            commands::config::handle_config(action.clone()).await;
+            return;
+        }
+        Commands::Completion { shell } | Commands::Completions { shell } => {
+            generate_completion(*shell);
+            return;
+        }
+        _ => {} // fall through to connect
     }
 
-    // Handle completion commands separately (doesn't need a cluster connection)
-    if let Commands::Completion { shell } = &cli.command {
-        generate_completion(*shell);
-        return;
-    }
-    if let Commands::Completions { shell } = &cli.command {
-        generate_completion(*shell);
-        return;
-    }
-
-    // For all other commands, create a cluster connection
+    // Build cluster connection for commands that need it
     let cli_params = ClusterCliParams {
         security_protocol: cli.security_protocol,
         mechanism: cli.sasl_mechanism,
@@ -46,50 +53,30 @@ async fn main() {
         tls_key: cli.tls_key,
         tls_insecure: cli.tls_insecure,
     };
-    let cluster_result =
-        resolve_cluster(cli.cluster.as_deref(), cli.brokers.as_deref(), &cli_params);
 
-    match cluster_result {
-        Ok((_, cluster_cfg)) => {
-            let client_result = create_client(&cluster_cfg).await;
-            match client_result {
-                Ok(kafka_client) => {
-                    let admin = AdminClient::new(kafka_client);
-                    execute_command(cli.command, admin).await;
-                }
-                Err(e) => {
-                    eprintln!("ERROR: {e}");
-                    std::process::exit(1);
-                }
-            }
-        }
-        Err(e) => {
-            eprintln!("ERROR: {e}");
-            std::process::exit(1);
-        }
-    }
-}
+    let (_, cluster_cfg) =
+        resolve_cluster(cli.cluster.as_deref(), cli.brokers.as_deref(), &cli_params)
+            .unwrap_or_else(|e| {
+                eprintln!("ERROR: {e}");
+                std::process::exit(1);
+            });
 
-async fn execute_command(command: Commands, admin: AdminClient) {
-    match command {
+    let kafka_client = create_client(&cluster_cfg).await.unwrap_or_else(|e| {
+        eprintln!("ERROR: {e}");
+        std::process::exit(1);
+    });
+
+    let admin = AdminClient::new(kafka_client);
+    match cli.command {
         Commands::Config { .. } | Commands::Completion { .. } | Commands::Completions { .. } => {
-            unreachable!("handled above")
+            unreachable!()
         }
-        Commands::Node { action } => {
-            commands::node::handle_node(action, admin).await;
-        }
-        Commands::Topic { action } => {
-            commands::topic::handle_topic(action, admin).await;
-        }
-        Commands::Produce(args) => {
-            commands::produce::handle_produce(args, admin).await;
-        }
-        Commands::Consume(args) => {
-            commands::consume::handle_consume(args, admin).await;
-        }
-        Commands::Group { action } => {
-            commands::group::handle_group(action, admin).await;
-        }
+        Commands::Node { action } => commands::node::handle_node(action, admin).await,
+        Commands::Topic { action } => commands::topic::handle_topic(action, admin).await,
+        Commands::Topics => commands::topic::handle_topic(TopicAction::Ls, admin).await,
+        Commands::Produce(args) => commands::produce::handle_produce(args, admin).await,
+        Commands::Consume(args) => commands::consume::handle_consume(args, admin).await,
+        Commands::Group { action } => commands::group::handle_group(action, admin).await,
     }
 }
 

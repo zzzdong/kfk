@@ -1,7 +1,8 @@
-use crate::cli::args::ConsumeArgs;
+use crate::cli::args::{ConsumeArgs, OffsetValue, OutputFormat};
 use crate::cli::output;
 use crate::client::{AdminClient, CliResult, create_consumer};
 use std::time::Duration;
+use uuid::Uuid;
 
 pub async fn handle_consume(args: ConsumeArgs, admin: AdminClient) {
     let result = consume_impl(args, admin).await;
@@ -11,17 +12,22 @@ pub async fn handle_consume(args: ConsumeArgs, admin: AdminClient) {
 }
 
 async fn consume_impl(args: ConsumeArgs, admin: AdminClient) -> CliResult<()> {
-    let offset = match args.offset.to_lowercase().as_str() {
-        "earliest" => kafka_client::AutoOffsetReset::Earliest,
-        "latest" => kafka_client::AutoOffsetReset::Latest,
-        _ => {
-            output::print_err("Offset must be 'earliest' or 'latest'");
-            kafka_client::AutoOffsetReset::Latest
-        }
+    let offset = match args.offset {
+        OffsetValue::Earliest => kafka_client::AutoOffsetReset::Earliest,
+        OffsetValue::Latest => kafka_client::AutoOffsetReset::Latest,
+    };
+
+    // 自动生成随机消费组，避免 rebalance 等待
+    let group = if args.group.eq_ignore_ascii_case("random") {
+        let g = format!("kfk-{}", Uuid::new_v4());
+        output::print_note(format!("Using random group: {g}"));
+        g
+    } else {
+        args.group.clone()
     };
 
     let client = admin.client();
-    let mut consumer = create_consumer(client, &args.group, offset).await?;
+    let mut consumer = create_consumer(client, &group, offset).await?;
 
     consumer
         .subscribe(vec![args.topic.clone()])
@@ -30,44 +36,41 @@ async fn consume_impl(args: ConsumeArgs, admin: AdminClient) -> CliResult<()> {
 
     output::print_ok(format!(
         "Consuming from '{}' (group: {}, offset: {})",
-        args.topic, args.group, args.offset
+        args.topic, group, args.offset
     ));
 
-    // Wait for consumer group assignment
-    tokio::time::sleep(Duration::from_secs(3)).await;
-
-    let json_output = args.output == "json-each-row";
-    let tail = args.tail.unwrap_or(usize::MAX);
+    let pretty_output = args.output == OutputFormat::Pretty;
+    let tail = args.tail;
     let mut consumed = 0;
-    let mut empty_polls = 0;
-    let max_empty_polls = if tail == usize::MAX { 60 } else { 15 };
-    // If latest offset and no messages, give up after 15s
-    let latest_timeout = args.offset == "latest";
-    let max_empty_initial = if latest_timeout { 15 } else { 60 };
+    let mut empty_polls = 0u32;
 
     loop {
-        match consumer.poll(1000).await {
+        match consumer.poll_timeout(Duration::from_millis(1000)).await {
             Ok(records) => {
                 if records.is_empty() {
-                    empty_polls += 1;
-                    if empty_polls >= max_empty_polls && consumed > 0 {
-                        break;
+                    if tail.is_some() {
+                        // --tail 模式：消费完后若持续 15 秒无数据则退出
+                        if consumed > 0 {
+                            empty_polls += 1;
+                            if empty_polls >= 15 {
+                                break;
+                            }
+                        }
+                        continue;
                     }
-                    if consumed == 0 && empty_polls >= max_empty_initial {
-                        break; // No messages available
-                    }
+                    // 无限模式：持续轮询，永不因无数据退出
                     continue;
-                } else {
-                    empty_polls = 0;
                 }
 
                 for r in records {
-                    if consumed >= tail {
-                        admin.close().await?;
-                        return Ok(());
+                    if let Some(n) = tail {
+                        if consumed >= n {
+                            admin.close().await?;
+                            return Ok(());
+                        }
                     }
 
-                    if json_output {
+                    if pretty_output {
                         let record_json = serde_json::json!({
                             "topic": r.topic,
                             "partition": r.partition,
@@ -82,7 +85,15 @@ async fn consume_impl(args: ConsumeArgs, admin: AdminClient) -> CliResult<()> {
                                 })
                             }).collect::<Vec<_>>(),
                         });
-                        println!("{record_json}");
+                        let json_str = serde_json::to_string_pretty(&record_json)
+                            .unwrap_or_else(|_| record_json.to_string());
+                        match colored_json::to_colored_json(
+                            &record_json,
+                            colored_json::ColorMode::On,
+                        ) {
+                            Ok(colored) => println!("{colored}"),
+                            Err(_) => println!("{json_str}"),
+                        }
                     } else {
                         println!("{}", String::from_utf8_lossy(&r.value));
                     }

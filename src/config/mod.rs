@@ -7,8 +7,8 @@ pub use model::*;
 /// Auth and TLS params passed via CLI (ad-hoc cluster)
 #[derive(Debug, Clone, Default)]
 pub struct ClusterCliParams {
-    pub security_protocol: String,
-    pub mechanism: Option<String>,
+    pub security_protocol: SecurityProtocolType,
+    pub mechanism: Option<SaslMechanism>,
     pub username: Option<String>,
     pub password: Option<String>,
     pub tls_enabled: bool,
@@ -31,12 +31,15 @@ pub fn resolve_cluster(
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty())
             .collect();
-        if broker_list.is_empty() {
-            return Err("No brokers specified".to_string());
-        }
+
+        let broker_list = if broker_list.is_empty() {
+            vec!["127.0.0.1:9092".to_string()]
+        } else {
+            broker_list
+        };
         let sasl_config = build_sasl_config(cli_params);
         let tls_config = build_tls_config(cli_params);
-        let mut proto = parse_security_protocol(&cli_params.security_protocol);
+        let mut proto = cli_params.security_protocol.clone();
         // Auto-upgrade: SASL creds + plain protocol → SASL_PLAINTEXT
         if sasl_config.is_some()
             && proto == SecurityProtocolType::Plaintext
@@ -68,23 +71,10 @@ pub fn resolve_cluster(
     get_cluster(name)
 }
 
-fn parse_security_protocol(s: &str) -> SecurityProtocolType {
-    match s.to_uppercase().as_str() {
-        "SSL" => SecurityProtocolType::Ssl,
-        "SASL_PLAINTEXT" => SecurityProtocolType::SaslPlaintext,
-        "SASL_SSL" => SecurityProtocolType::SaslSsl,
-        _ => SecurityProtocolType::Plaintext,
-    }
-}
-
 fn build_sasl_config(params: &ClusterCliParams) -> Option<SaslConfig> {
     let username = params.username.as_ref()?;
     let password = params.password.as_ref()?;
-    let mechanism = match params.mechanism.as_deref() {
-        Some("SCRAM-SHA-256") => SaslMechanism::ScramSha256,
-        Some("SCRAM-SHA-512") => SaslMechanism::ScramSha512,
-        _ => SaslMechanism::Plain,
-    };
+    let mechanism = params.mechanism.clone().unwrap_or(SaslMechanism::Plain);
     Some(SaslConfig {
         mechanism,
         username: username.clone(),

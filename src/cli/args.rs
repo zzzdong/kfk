@@ -1,4 +1,35 @@
-use clap::{Args, Parser, Subcommand};
+use crate::config::{SaslMechanism, SecurityProtocolType};
+use clap::{Args, Parser, Subcommand, ValueEnum};
+
+/// Output format for consume command
+#[derive(ValueEnum, Clone, Debug, PartialEq)]
+pub enum OutputFormat {
+    Text,
+    Pretty,
+}
+
+/// Offset value for consume command
+#[derive(ValueEnum, Clone, Debug, PartialEq)]
+pub enum OffsetValue {
+    Earliest,
+    Latest,
+}
+
+impl std::fmt::Display for OffsetValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Earliest => write!(f, "earliest"),
+            Self::Latest => write!(f, "latest"),
+        }
+    }
+}
+
+/// Input format for produce command
+#[derive(ValueEnum, Clone, Debug, PartialEq)]
+pub enum InputFormat {
+    Text,
+    Json,
+}
 
 /// Kafka CLI - a command line tool for Kafka cluster management
 #[derive(Parser, Debug)]
@@ -12,17 +43,17 @@ pub struct Cli {
     #[arg(short, long)]
     pub cluster: Option<String>,
 
-    /// Verbose output
-    #[arg(short, long)]
-    pub verbose: bool,
+    /// Verbosity level (repeatable: -v, -vv, -vvv, -vvvv)
+    #[arg(short, long, action = clap::ArgAction::Count)]
+    pub verbose: u8,
 
-    /// Security protocol: PLAINTEXT | SSL | SASL_PLAINTEXT | SASL_SSL
-    #[arg(long, default_value = "PLAINTEXT")]
-    pub security_protocol: String,
+    /// Security protocol
+    #[arg(long, value_enum, default_value_t = SecurityProtocolType::Plaintext)]
+    pub security_protocol: SecurityProtocolType,
 
-    /// SASL mechanism: PLAIN | SCRAM-SHA-256 | SCRAM-SHA-512
-    #[arg(long)]
-    pub sasl_mechanism: Option<String>,
+    /// SASL mechanism
+    #[arg(long, value_enum)]
+    pub sasl_mechanism: Option<SaslMechanism>,
 
     /// SASL username
     #[arg(long)]
@@ -70,11 +101,14 @@ pub enum Commands {
         action: NodeAction,
     },
 
-    /// Topic operations
+    /// Topic operations (alias: topic)
     Topic {
         #[command(subcommand)]
         action: TopicAction,
     },
+
+    /// List all topics (shorthand)
+    Topics,
 
     /// Produce messages to a topic (reads from stdin)
     Produce(ProduceArgs),
@@ -113,9 +147,9 @@ pub struct ProduceArgs {
     #[arg(long = "header", value_parser = parse_key_val)]
     pub headers: Vec<(String, String)>,
 
-    /// Input format: text | json-each-row
-    #[arg(long, default_value = "text")]
-    pub input: String,
+    /// Input format
+    #[arg(long, value_enum, default_value_t = InputFormat::Text)]
+    pub input: InputFormat,
 }
 
 #[derive(Args, Clone, Debug)]
@@ -123,17 +157,17 @@ pub struct ConsumeArgs {
     /// Topic to consume from
     pub topic: String,
 
-    /// Consumer group ID
-    #[arg(short, long, default_value = "kfk-cli")]
+    /// Consumer group ID (use "random" to auto-generate)
+    #[arg(short, long, default_value = "random")]
     pub group: String,
 
-    /// Output format: text | json-each-row
-    #[arg(short, long, default_value = "text")]
-    pub output: String,
+    /// Output format
+    #[arg(short, long, value_enum, default_value_t = OutputFormat::Pretty)]
+    pub output: OutputFormat,
 
-    /// Offset: earliest | latest | <N>
-    #[arg(long, default_value = "latest")]
-    pub offset: String,
+    /// Offset: earliest | latest
+    #[arg(long, value_enum, default_value_t = OffsetValue::Latest)]
+    pub offset: OffsetValue,
 
     /// Partition to consume from
     #[arg(long)]
@@ -159,13 +193,13 @@ pub enum ConfigAction {
         #[arg(short, long)]
         brokers: String,
 
-        /// Security protocol: PLAINTEXT | SSL | SASL_PLAINTEXT | SASL_SSL
-        #[arg(long, default_value = "PLAINTEXT")]
-        security_protocol: String,
+        /// Security protocol
+        #[arg(long, value_enum, default_value_t = SecurityProtocolType::Plaintext)]
+        security_protocol: SecurityProtocolType,
 
-        /// SASL mechanism: PLAIN | SCRAM-SHA-256 | SCRAM-SHA-512
-        #[arg(long)]
-        sasl_mechanism: Option<String>,
+        /// SASL mechanism
+        #[arg(long, value_enum)]
+        sasl_mechanism: Option<SaslMechanism>,
 
         /// SASL username
         #[arg(long)]
@@ -210,7 +244,7 @@ pub enum NodeAction {
 
 #[derive(Subcommand, Debug)]
 pub enum TopicAction {
-    /// List all topics (default)
+    /// List all topics
     Ls,
 
     /// Describe a topic
@@ -253,7 +287,7 @@ pub enum GroupAction {
         #[arg(short = 't', long)]
         topic: String,
 
-        /// Offset: earliest | latest | <N>
+        /// Offset: earliest, latest, or a numeric offset
         #[arg(long, default_value = "latest")]
         offset: String,
 

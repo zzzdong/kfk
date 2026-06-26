@@ -67,3 +67,8 @@ pub fn print_err(msg: impl std::fmt::Display) {
 pub fn print_ok(msg: impl std::fmt::Display) {
     println!("✓ {msg}");
 }
+
+/// Print an info/note message
+pub fn print_note(msg: impl std::fmt::Display) {
+    println!("ℹ {msg}");
+}

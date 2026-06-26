@@ -35,7 +35,7 @@ pub struct ClusterConfig {
     pub tls: Option<TlsConfig>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, Default, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, Default, PartialEq, clap::ValueEnum)]
 pub enum SecurityProtocolType {
     #[default]
     #[serde(rename = "PLAINTEXT")]
@@ -66,7 +66,7 @@ pub struct SaslConfig {
     pub password: String,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, clap::ValueEnum)]
 #[serde(rename_all = "SCREAMING-KEBAB-CASE")]
 pub enum SaslMechanism {
     Plain,
