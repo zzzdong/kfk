@@ -61,12 +61,12 @@ async fn main() {
                 std::process::exit(1);
             });
 
-    let kafka_client = create_client(&cluster_cfg).await.unwrap_or_else(|e| {
+    let client = create_client(&cluster_cfg).await.unwrap_or_else(|e| {
         eprintln!("ERROR: {e}");
         std::process::exit(1);
     });
 
-    let admin = AdminClient::new(kafka_client);
+    let admin = AdminClient::new(client);
     match cli.command {
         Commands::Config { .. } | Commands::Completion { .. } | Commands::Completions { .. } => {
             unreachable!()

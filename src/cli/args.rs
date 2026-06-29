@@ -101,7 +101,7 @@ pub enum Commands {
         action: NodeAction,
     },
 
-    /// Topic operations (alias: topic)
+    /// Topic operations
     Topic {
         #[command(subcommand)]
         action: TopicAction,

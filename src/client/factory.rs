@@ -2,14 +2,14 @@ use std::net::ToSocketAddrs;
 use std::time::Duration;
 
 use kafka_client::SaslMechanismType;
-use kafka_client::{AutoOffsetReset, ConsumerConfig, KafkaClient, ProducerConfig, TlsConfig};
+use kafka_client::{AutoOffsetReset, Client, ConsumerConfig, ProducerConfig, TlsConfig};
 
 use crate::config::{ClusterConfig, SecurityProtocolType};
 
 use super::CliResult;
 
-/// Create KafkaClient from cluster config
-pub async fn create_client(config: &ClusterConfig) -> CliResult<KafkaClient> {
+/// Create Client from cluster config
+pub async fn create_client(config: &ClusterConfig) -> CliResult<Client> {
     let addrs: Vec<std::net::SocketAddr> = config
         .brokers
         .iter()
@@ -21,7 +21,7 @@ pub async fn create_client(config: &ClusterConfig) -> CliResult<KafkaClient> {
         })
         .collect();
 
-    let builder = KafkaClient::builder(addrs)
+    let builder = Client::builder(addrs)
         .with_client_id("kfk-cli")
         .with_metadata_ttl(Duration::from_secs(30));
 
@@ -34,9 +34,9 @@ pub async fn create_client(config: &ClusterConfig) -> CliResult<KafkaClient> {
 }
 
 fn apply_security(
-    builder: kafka_client::KafkaClientBuilder,
+    builder: kafka_client::ClientBuilder,
     config: &ClusterConfig,
-) -> CliResult<kafka_client::KafkaClientBuilder> {
+) -> CliResult<kafka_client::ClientBuilder> {
     Ok(match config.security_protocol {
         SecurityProtocolType::Plaintext => builder.with_plaintext(),
         SecurityProtocolType::Ssl => {
@@ -57,7 +57,7 @@ fn apply_security(
 
 /// Create a consumer with given group_id and offset strategy
 pub async fn create_consumer(
-    client: &KafkaClient,
+    client: &Client,
     group_id: &str,
     offset: AutoOffsetReset,
 ) -> CliResult<kafka_client::Consumer> {
@@ -78,17 +78,14 @@ pub async fn create_consumer(
 
 /// Create a producer
 #[allow(dead_code)]
-pub async fn create_producer(client: &KafkaClient) -> CliResult<kafka_client::Producer> {
+pub async fn create_producer(client: &Client) -> kafka_client::Producer {
     let config = ProducerConfig::new()
         .with_acks(1)
         .with_timeout(5000)
         .with_retries(3)
         .with_batch_size(16384)
         .with_linger(50);
-    client
-        .producer(config)
-        .await
-        .map_err(|e| format!("Failed to create producer: {e}"))
+    client.producer(config).await
 }
 
 /// Map our config TLS to kafka_client TlsConfig

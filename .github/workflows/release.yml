@@ -25,7 +25,7 @@ jobs:
             archive: 7z a -tzip
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install musl tools (Linux)
         if: runner.os == 'Linux'
@@ -42,48 +42,46 @@ jobs:
       - name: Prepare archive
         shell: bash
         run: |
+          ARTIFACTS_DIR="${{ runner.temp }}/artifacts"
+          mkdir -p "$ARTIFACTS_DIR"
           cd target/${{ matrix.target }}/release
           case "${{ matrix.ext }}" in
             tar.gz)
-              tar czf kfk-${{ matrix.target }}.tar.gz kfk${{ matrix.target == 'x86_64-pc-windows-msvc' && '.exe' || '' }}
+              tar czf "$ARTIFACTS_DIR/kfk-${{ matrix.target }}.tar.gz" kfk
               ;;
             zip)
-              7z a -tzip kfk-${{ matrix.target }}.zip kfk.exe
+              7z a -tzip "$ARTIFACTS_DIR/kfk-${{ matrix.target }}.zip" kfk.exe
               ;;
           esac
-          mkdir -p /tmp/artifacts
-          mv kfk-${{ matrix.target }}.${{ matrix.ext }} /tmp/artifacts/
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: kfk-${{ matrix.target }}
-          path: /tmp/artifacts/kfk-${{ matrix.target }}.${{ matrix.ext }}
+          path: ${{ runner.temp }}/artifacts/kfk-${{ matrix.target }}.${{ matrix.ext }}
 
   release:
     name: Create Release
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
-          path: /tmp/artifacts
+          path: ${{ runner.temp }}/artifacts
 
       - name: Generate checksums
         run: |
-          cd /tmp/artifacts
-          find . -type f -name '*.tar.gz' -o -name '*.zip' | while read f; do
-            sha256sum "$f" >> checksums.txt
-          done
+          cd "${{ runner.temp }}/artifacts"
+          find . -type f \( -name '*.tar.gz' -o -name '*.zip' \) -exec sha256sum {} + > checksums.txt
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           name: Release ${{ github.ref_name }}
           body_path: CHANGELOG.md
           fail_on_unmatched_files: false
           files: |
-            /tmp/artifacts/**/*
+            ${{ runner.temp }}/artifacts/**/*

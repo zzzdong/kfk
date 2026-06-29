@@ -4,32 +4,32 @@ use kafka_client::protocol::{
     CreateTopicsRequest, DescribeGroupsRequest, DescribeGroupsResponse, FindCoordinatorRequest,
     FindCoordinatorResponse, ListGroupsRequest, ListGroupsResponse,
 };
-use kafka_client::{ClusterClient, KafkaClient, Producer, ProducerConfig};
-use std::sync::Arc;
+use kafka_client::{Client, Producer, ProducerConfig};
 use std::time::Duration;
 
 use super::CliResult;
 use super::types::*;
 
-/// AdminClient wraps cluster operations for CLI usage
+/// AdminClient wraps the unified `Client` for CLI usage.
+///
+/// Provides convenience methods for cluster administration that go beyond
+/// the built-in `admin::AdminClient` (e.g. offset commit, find-coordinator flow).
 pub struct AdminClient {
-    pub cluster: Arc<ClusterClient>,
-    client: KafkaClient,
+    client: Client,
 }
 
 impl AdminClient {
-    pub fn new(client: KafkaClient) -> Self {
-        let cluster = client.cluster().clone();
-        Self { cluster, client }
+    pub fn new(client: Client) -> Self {
+        Self { client }
     }
 
-    /// Get the underlying KafkaClient
-    pub fn client(&self) -> &KafkaClient {
+    /// Get the underlying Client (for low-level `send_to_any_broker` etc.)
+    pub fn client(&self) -> &Client {
         &self.client
     }
 
     /// Create a producer from this client
-    pub async fn create_producer(&self) -> Result<Producer, kafka_client::KafkaError> {
+    pub async fn create_producer(&self) -> Producer {
         let config = ProducerConfig::new()
             .with_acks(1)
             .with_timeout(5000)
@@ -41,10 +41,22 @@ impl AdminClient {
 
     /// Refresh cluster metadata
     pub async fn refresh_metadata(&self) -> CliResult<()> {
-        self.cluster
+        self.client
             .refresh_metadata()
             .await
             .map_err(|e| format!("Failed to refresh metadata: {e}"))
+    }
+
+    /// Send a request to any available broker (low-level)
+    pub async fn send_to_any<Req, Resp>(&self, request: &Req) -> CliResult<Resp>
+    where
+        Req: kafka_client::protocol::Request,
+        Resp: kafka_client::protocol::Response,
+    {
+        self.client
+            .send_to_any_broker(request)
+            .await
+            .map_err(|e| format!("Request failed: {e}"))
     }
 
     /// List all topics
@@ -117,11 +129,7 @@ impl AdminClient {
             validate_only: false,
         };
 
-        let resp: kafka_client::protocol::CreateTopicsResponse = self
-            .cluster
-            .send_to_any_broker(&req)
-            .await
-            .map_err(|e| format!("Failed to create topic: {e}"))?;
+        let resp: kafka_client::protocol::CreateTopicsResponse = self.send_to_any(&req).await?;
 
         for t in &resp.topics {
             if t.error_code != 0 && t.error_code != 36 {
@@ -145,11 +153,7 @@ impl AdminClient {
             timeout_ms: 10000,
         };
 
-        let resp: kafka_client::protocol::DeleteTopicsResponse = self
-            .cluster
-            .send_to_any_broker(&req)
-            .await
-            .map_err(|e| format!("Failed to delete topic: {e}"))?;
+        let resp: kafka_client::protocol::DeleteTopicsResponse = self.send_to_any(&req).await?;
 
         for t in &resp.responses {
             if t.error_code != 0 {
@@ -197,11 +201,7 @@ impl AdminClient {
             types_filter: vec![],
         };
 
-        let resp: ListGroupsResponse = self
-            .cluster
-            .send_to_any_broker(&req)
-            .await
-            .map_err(|e| format!("Failed to list groups: {e}"))?;
+        let resp: ListGroupsResponse = self.send_to_any(&req).await?;
 
         let mut groups: Vec<GroupInfo> = resp
             .groups
@@ -231,11 +231,7 @@ impl AdminClient {
                 key_type: 0,
                 coordinator_keys: vec![group_id.to_string()],
             };
-            let resp: FindCoordinatorResponse = self
-                .cluster
-                .send_to_any_broker(&req)
-                .await
-                .map_err(|e| format!("Failed to find coordinator: {e}"))?;
+            let resp: FindCoordinatorResponse = self.send_to_any(&req).await?;
 
             // error_code 15 = GROUP_COORDINATOR_NOT_AVAILABLE (retryable)
             if resp.error_code == 15 {
@@ -273,11 +269,7 @@ impl AdminClient {
             include_authorized_operations: false,
         };
 
-        let resp: DescribeGroupsResponse = self
-            .cluster
-            .send_to_any_broker(&req)
-            .await
-            .map_err(|e| format!("Failed to describe group: {e}"))?;
+        let resp: DescribeGroupsResponse = self.send_to_any(&req).await?;
 
         let group = resp
             .groups

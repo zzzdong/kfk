@@ -14,7 +14,7 @@ keywords = ["kafka", "cli", "kafka-client", "kafka-admin"]
 categories = ["command-line-utilities", "database"]
 
 [dependencies]
-kafka_client = "0.1.2"
+kafka_client = "0.2.0"
 clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
 serde = { version = "1", features = ["derive"] }
@@ -36,5 +36,5 @@ lto = "thin"
 codegen-units = 1
 strip = "symbols"
 
-# [patch.crates-io]
-# kafka_client = { path = "../kafka-client" }
+#[patch.crates-io]
+#kafka_client = { path = "../kafka_client" }

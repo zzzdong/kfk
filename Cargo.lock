@@ -77,17 +77,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "async-trait"
-version = "0.1.89"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9035ad2d096bed7955a320ee7e2230574d28fd3c3a0f186cbea1ff3c7eed5dbb"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
 name = "aws-lc-rs"
 version = "1.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -631,7 +620,9 @@ dependencies = [
 
 [[package]]
 name = "kafka-client-protocol"
-version = "0.1.1"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1aee02cb2f477034dbc30c862a5d6ad887f0bb431dd7a0803d4c971b4f8a0129"
 dependencies = [
  "bytes",
  "kafka-client-protocol-core",
@@ -641,7 +632,9 @@ dependencies = [
 
 [[package]]
 name = "kafka-client-protocol-core"
-version = "0.1.1"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c3e9394e9cb5a957f5c701500c6e98cd33055a48ff3e5c335bd33cf842b2f697"
 dependencies = [
  "bytes",
  "crc32c",
@@ -657,7 +650,9 @@ dependencies = [
 
 [[package]]
 name = "kafka-client-protocol-derive"
-version = "0.1.1"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "737803c5b57e5c57f69d293ba0724824678f693f44db0dc8fcb60c6108b21bf5"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -666,10 +661,11 @@ dependencies = [
 
 [[package]]
 name = "kafka_client"
-version = "0.1.2"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b85d40d4f77ab27fc71ea27d1dfde028e4349c89762243bd1efb8fea30d2f492"
 dependencies = [
  "arc-swap",
- "async-trait",
  "base64",
  "bytes",
  "dashmap",

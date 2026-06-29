@@ -1,10 +1,7 @@
-use kafka_client::protocol::{
-    OffsetCommitRequest, OffsetCommitRequestPartition, OffsetCommitRequestTopic,
-};
-
 use crate::cli::args::GroupAction;
 use crate::cli::output::{self, TableRow};
 use crate::client::{AdminClient, CliResult};
+use kafka_client::admin::OffsetCommitSpec;
 
 pub async fn handle_group(action: GroupAction, admin: AdminClient) {
     let result = match action {
@@ -59,38 +56,23 @@ async fn commit_offset(
         n => n.parse().map_err(|_| format!("Invalid offset: {n}"))?,
     };
 
-    let make_topic = |partitions: Vec<OffsetCommitRequestPartition>| OffsetCommitRequestTopic {
-        name: topic.to_string(),
-        topic_id: uuid::Uuid::nil(),
-        partitions,
-    };
-
     if all_partitions {
         let detail = admin.describe_topic(topic).await?;
-        let partition_ids: Vec<i32> = detail.partitions.iter().map(|p| p.id).collect();
-
-        let req = OffsetCommitRequest {
-            group_id: group.to_string(),
-            generation_id_or_member_epoch: -1,
-            member_id: String::new(),
-            group_instance_id: None,
-            retention_time_ms: -1,
-            topics: vec![make_topic(
-                partition_ids
-                    .iter()
-                    .map(|&p| OffsetCommitRequestPartition {
-                        partition_index: p,
-                        committed_offset: offset_value,
-                        committed_leader_epoch: -1,
-                        committed_metadata: None,
-                    })
-                    .collect(),
-            )],
-        };
+        let specs: Vec<OffsetCommitSpec> = detail
+            .partitions
+            .iter()
+            .map(|p| OffsetCommitSpec {
+                topic: topic.to_string(),
+                partition: p.id,
+                offset: offset_value,
+                metadata: None,
+            })
+            .collect();
 
         admin
-            .cluster
-            .send_to_any_broker::<_, kafka_client::protocol::OffsetCommitResponse>(&req)
+            .client()
+            .admin()
+            .commit_offsets(group, &specs)
             .await
             .map_err(|e| format!("Failed to commit offset: {e}"))?;
 
@@ -98,23 +80,17 @@ async fn commit_offset(
             "Committed offset '{offset}' for group '{group}' on topic '{topic}' (all partitions)"
         ));
     } else if let Some(partition_id) = partition {
-        let req = OffsetCommitRequest {
-            group_id: group.to_string(),
-            generation_id_or_member_epoch: -1,
-            member_id: String::new(),
-            group_instance_id: None,
-            retention_time_ms: -1,
-            topics: vec![make_topic(vec![OffsetCommitRequestPartition {
-                partition_index: partition_id,
-                committed_offset: offset_value,
-                committed_leader_epoch: -1,
-                committed_metadata: None,
-            }])],
-        };
+        let specs = [OffsetCommitSpec {
+            topic: topic.to_string(),
+            partition: partition_id,
+            offset: offset_value,
+            metadata: None,
+        }];
 
         admin
-            .cluster
-            .send_to_any_broker::<_, kafka_client::protocol::OffsetCommitResponse>(&req)
+            .client()
+            .admin()
+            .commit_offsets(group, &specs)
             .await
             .map_err(|e| format!("Failed to commit offset: {e}"))?;
 
@@ -130,13 +106,10 @@ async fn commit_offset(
 }
 
 async fn delete_group(group: &str, admin: AdminClient) -> CliResult<()> {
-    let req = kafka_client::protocol::DeleteGroupsRequest {
-        groups_names: vec![group.to_string()],
-    };
-
     admin
-        .cluster
-        .send_to_any_broker::<_, kafka_client::protocol::DeleteGroupsResponse>(&req)
+        .client()
+        .admin()
+        .delete_group(group)
         .await
         .map_err(|e| format!("Failed to delete group: {e}"))?;
 

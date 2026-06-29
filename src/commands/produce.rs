@@ -13,10 +13,7 @@ pub async fn handle_produce(args: ProduceArgs, admin: AdminClient) {
 }
 
 async fn produce_impl(args: ProduceArgs, admin: AdminClient) -> CliResult<()> {
-    let producer = admin
-        .create_producer()
-        .await
-        .map_err(|e| format!("Failed to create producer: {e}"))?;
+    let producer = admin.create_producer().await;
 
     // Read from stdin
     let mut line = String::new();
