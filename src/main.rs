@@ -4,7 +4,7 @@ mod commands;
 mod config;
 
 use clap::Parser;
-use cli::args::{Cli, Commands, TopicAction};
+use cli::args::{Cli, Commands, ConfigAction, GroupAction, NodeAction, TopicAction};
 use client::{AdminClient, create_client};
 use config::ClusterCliParams;
 use config::resolve_cluster;
@@ -32,6 +32,10 @@ async fn main() {
     match &cli.command {
         Commands::Config { action } => {
             commands::config::handle_config(action.clone()).await;
+            return;
+        }
+        Commands::Configs => {
+            commands::config::handle_config(ConfigAction::List).await;
             return;
         }
         Commands::Completion { shell } | Commands::Completions { shell } => {
@@ -68,15 +72,20 @@ async fn main() {
 
     let admin = AdminClient::new(client);
     match cli.command {
-        Commands::Config { .. } | Commands::Completion { .. } | Commands::Completions { .. } => {
+        Commands::Config { .. }
+        | Commands::Configs
+        | Commands::Completion { .. }
+        | Commands::Completions { .. } => {
             unreachable!()
         }
         Commands::Node { action } => commands::node::handle_node(action, admin).await,
+        Commands::Nodes => commands::node::handle_node(NodeAction::Ls, admin).await,
         Commands::Topic { action } => commands::topic::handle_topic(action, admin).await,
         Commands::Topics => commands::topic::handle_topic(TopicAction::Ls, admin).await,
         Commands::Produce(args) => commands::produce::handle_produce(args, admin).await,
         Commands::Consume(args) => commands::consume::handle_consume(args, admin).await,
         Commands::Group { action } => commands::group::handle_group(action, admin).await,
+        Commands::Groups => commands::group::handle_group(GroupAction::Ls, admin).await,
     }
 }
 

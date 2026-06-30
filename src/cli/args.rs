@@ -95,11 +95,17 @@ pub enum Commands {
         action: ConfigAction,
     },
 
+    /// List all configured clusters (shorthand)
+    Configs,
+
     /// Cluster node operations
     Node {
         #[command(subcommand)]
         action: NodeAction,
     },
+
+    /// List all brokers (shorthand)
+    Nodes,
 
     /// Topic operations
     Topic {
@@ -121,6 +127,9 @@ pub enum Commands {
         #[command(subcommand)]
         action: GroupAction,
     },
+
+    /// List all consumer groups (shorthand)
+    Groups,
 
     /// Generate shell completion script
     Completion { shell: clap_complete::Shell },
@@ -232,13 +241,13 @@ pub enum ConfigAction {
     /// Select the active cluster
     SelectCluster { name: String },
 
-    /// List all configured clusters (default)
+    /// List all configured clusters
     List,
 }
 
 #[derive(Subcommand, Debug)]
 pub enum NodeAction {
-    /// List all brokers (default)
+    /// List all brokers
     Ls,
 }
 
@@ -269,7 +278,7 @@ pub enum TopicAction {
 
 #[derive(Subcommand, Debug)]
 pub enum GroupAction {
-    /// List all consumer groups (default)
+    /// List all consumer groups
     Ls,
 
     /// Describe a consumer group
