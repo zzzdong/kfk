@@ -34,20 +34,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y musl-tools
 
-      - name: Install cargo-zigbuild (aarch64)
-        if: matrix.target == 'aarch64-unknown-linux-musl'
-        run: cargo install --locked cargo-zigbuild
-
-      - name: Install Rust target
-        run: rustup target add ${{ matrix.target }}
-
       - name: Build release
-        run: |
-          if [ '${{ matrix.target }}' = 'aarch64-unknown-linux-musl' ]; then
-            cargo zigbuild --release --target ${{ matrix.target }}
-          else
-            cargo build --release --target ${{ matrix.target }}
-          fi
+        uses: houseabsolute/actions-rust-cross@v1
+        with:
+          target: ${{ matrix.target }}
+          args: --release
 
       - name: Prepare archive
         shell: bash
