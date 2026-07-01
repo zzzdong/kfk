@@ -63,12 +63,11 @@ async fn consume_impl(args: ConsumeArgs, admin: AdminClient) -> CliResult<()> {
                 }
 
                 for r in records {
-                    if let Some(n) = tail {
-                        if consumed >= n {
+                    if let Some(n) = tail
+                        && consumed >= n {
                             admin.close().await?;
                             return Ok(());
                         }
-                    }
 
                     if pretty_output {
                         let record_json = serde_json::json!({

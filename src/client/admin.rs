@@ -184,11 +184,10 @@ impl AdminClient {
 
         // Refresh metadata to get controller info
         self.refresh_metadata().await?;
-        if let Some(controller) = result.first().cloned() {
-            if let Some(b) = result.iter_mut().find(|b| b.id == controller.id) {
+        if let Some(controller) = result.first().cloned()
+            && let Some(b) = result.iter_mut().find(|b| b.id == controller.id) {
                 b.is_controller = true;
             }
-        }
 
         result.sort_by_key(|a| a.id);
         Ok(result)
@@ -238,12 +237,11 @@ impl AdminClient {
                 tokio::time::sleep(Duration::from_millis(500)).await;
                 continue;
             }
-            if let Some(coord) = resp.coordinators.first() {
-                if coord.error_code == 15 {
+            if let Some(coord) = resp.coordinators.first()
+                && coord.error_code == 15 {
                     tokio::time::sleep(Duration::from_millis(500)).await;
                     continue;
                 }
-            }
             break resp;
         };
 

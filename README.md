@@ -46,10 +46,10 @@ cargo build --release
 
 ```bash
 # List brokers
-kfk --brokers localhost:9092 node ls
+kfk --brokers localhost:9092 nodes
 
 # List topics
-kfk --brokers localhost:9092 topic ls
+kfk --brokers localhost:9092 topics
 
 # Create a topic
 kfk --brokers localhost:9092 topic create my-topic -p 3 -r 1
@@ -100,7 +100,7 @@ kfk --brokers localhost:9092 consume my-topic \
 kfk --brokers localhost:9094 \
     --sasl-username admin \
     --sasl-password admin-secret \
-    topic ls
+    topics
 ```
 
 The security protocol is automatically upgraded to `SASL_PLAINTEXT` when SASL credentials are provided.
@@ -145,7 +145,7 @@ kfk --brokers broker:9094 \
     --tls \
     --sasl-username admin \
     --sasl-password admin-secret \
-    topic ls
+    topics
 ```
 
 ---
@@ -170,7 +170,7 @@ kfk config select prod
 kfk config list
 
 # Then use without --brokers
-kfk topic ls
+kfk topics
 ```
 
 Configs are stored in `~/.kfk/config.toml`.
@@ -179,23 +179,32 @@ Configs are stored in `~/.kfk/config.toml`.
 
 ## Command Reference
 
+### Shorthand Commands
+For convenience, shorthand commands are available:
+- `kfk nodes` → `kfk node ls` (list brokers)
+- `kfk topics` → `kfk topic ls` (list topics)
+- `kfk groups` → `kfk group ls` (list consumer groups)
+- `kfk configs` → `kfk config list` (list configs)
+
+### Full Command List
+
 | Command | Description |
 |---------|-------------|
-| `node ls` | List all brokers |
-| `topic ls` | List all topics |
+| `node ls` (or `nodes`) | List all brokers |
+| `topic ls` (or `topics`) | List all topics |
 | `topic create <name>` | Create a topic |
 | `topic describe <name>` | Describe topic partitions |
 | `topic delete <name>` | Delete a topic |
 | `produce <topic>` | Produce messages (reads stdin) |
 | `consume <topic>` | Consume messages |
-| `group ls` | List consumer groups |
+| `group ls` (or `groups`) | List consumer groups |
 | `group describe <id>` | Describe a consumer group |
 | `group commit <id>` | Commit/reset offset |
 | `group delete <id>` | Delete a consumer group |
+| `config list` (or `configs`) | List all configs |
 | `config add-cluster <name>` | Save a cluster config |
 | `config remove-cluster <name>` | Remove a config |
 | `config select <name>` | Switch active config |
-| `config list` | List all configs |
 | `completion <shell>` | Generate shell completion |
 
 ### Global Options
