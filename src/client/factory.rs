@@ -1,4 +1,3 @@
-use std::net::ToSocketAddrs;
 use std::time::Duration;
 
 use kafka_client::SaslMechanismType;
@@ -10,18 +9,7 @@ use super::CliResult;
 
 /// Create Client from cluster config
 pub async fn create_client(config: &ClusterConfig) -> CliResult<Client> {
-    let addrs: Vec<std::net::SocketAddr> = config
-        .brokers
-        .iter()
-        .map(|b| {
-            b.to_socket_addrs()
-                .unwrap_or_else(|_| panic!("Invalid broker address: {b}"))
-                .next()
-                .expect("No address resolved")
-        })
-        .collect();
-
-    let builder = Client::builder(addrs)
+    let builder = Client::builder(config.brokers.clone())
         .with_client_id("kfk-cli")
         .with_metadata_ttl(Duration::from_secs(30));
 
@@ -55,13 +43,14 @@ fn apply_security(
     })
 }
 
-/// Create a consumer with given group_id and offset strategy
+/// Create a consumer with given group_id and offset strategy.
+/// When `group_id` is empty, creates a direct-mode consumer (no consumer group).
 pub async fn create_consumer(
     client: &Client,
     group_id: &str,
     offset: AutoOffsetReset,
 ) -> CliResult<kafka_client::Consumer> {
-    let config = ConsumerConfig::new(group_id.to_string())
+    let mut config = ConsumerConfig::new()
         .with_auto_commit(true)
         .with_auto_commit_interval(Duration::from_millis(5000))
         .with_auto_offset_reset(offset)
@@ -73,6 +62,11 @@ pub async fn create_consumer(
         .with_rebalance_timeout(Duration::from_millis(60000))
         .with_heartbeat_interval(Duration::from_millis(3000))
         .with_assignment_strategy(kafka_client::PartitionAssignmentStrategy::Range);
+
+    if !group_id.is_empty() {
+        config = config.with_group_id(group_id.to_string());
+    }
+
     Ok(client.consumer(config))
 }
 
@@ -89,6 +83,7 @@ pub async fn create_producer(client: &Client) -> kafka_client::Producer {
 }
 
 /// Map our config TLS to kafka_client TlsConfig
+#[allow(deprecated)]
 fn build_kafka_tls_config(tls: &Option<crate::config::TlsConfig>) -> TlsConfig {
     match tls {
         Some(cfg) => TlsConfig {

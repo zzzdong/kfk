@@ -166,8 +166,8 @@ pub struct ConsumeArgs {
     /// Topic to consume from
     pub topic: String,
 
-    /// Consumer group ID (use "random" to auto-generate)
-    #[arg(short, long, default_value = "random")]
+    /// Consumer group ID (use "none" for direct assign, "random" to auto-generate)
+    #[arg(short, long, default_value = "none")]
     pub group: String,
 
     /// Output format

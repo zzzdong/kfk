@@ -693,9 +693,9 @@ dependencies = [
 
 [[package]]
 name = "kafka_client"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "08c05798b55213b60b9dc2b08627cc74728231f460722c167c4aee16b5d3e159"
+checksum = "7a5781a7274e241ea63293f325cb4bde33799810ad28f7c7e8a1859bbebcb99f"
 dependencies = [
  "arc-swap",
  "base64",
@@ -722,7 +722,7 @@ dependencies = [
 
 [[package]]
 name = "kfk"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "bytes",
  "clap",

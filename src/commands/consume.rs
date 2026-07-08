@@ -2,7 +2,6 @@ use crate::cli::args::{ConsumeArgs, OffsetValue, OutputFormat};
 use crate::cli::output;
 use crate::client::{AdminClient, CliResult, create_consumer};
 use std::time::Duration;
-use uuid::Uuid;
 
 pub async fn handle_consume(args: ConsumeArgs, admin: AdminClient) {
     let result = consume_impl(args, admin).await;
@@ -17,27 +16,60 @@ async fn consume_impl(args: ConsumeArgs, admin: AdminClient) -> CliResult<()> {
         OffsetValue::Latest => kafka_client::AutoOffsetReset::Latest,
     };
 
-    // 自动生成随机消费组，避免 rebalance 等待
-    let group = if args.group.eq_ignore_ascii_case("random") {
-        let g = format!("kfk-{}", Uuid::new_v4());
+    let client = admin.client();
+
+    // Determine group mode vs direct (assign) mode
+    let is_direct = args.group.eq_ignore_ascii_case("none");
+
+    // Build group_id for group-mode consumption
+    let group_id = if args.group.eq_ignore_ascii_case("random") {
+        let g = format!("kfk-{}", uuid::Uuid::new_v4());
         output::print_note(format!("Using random group: {g}"));
         g
+    } else if is_direct {
+        // direct mode: no group, use assign instead of subscribe
+        String::new()
     } else {
         args.group.clone()
     };
 
-    let client = admin.client();
-    let mut consumer = create_consumer(client, &group, offset).await?;
+    let mut consumer = create_consumer(client, &group_id, offset).await?;
 
-    consumer
-        .subscribe(vec![args.topic.clone()])
-        .await
-        .map_err(|e| format!("Failed to subscribe: {e}"))?;
+    if is_direct {
+        // Direct mode: assign partitions manually
+        let partitions = if let Some(p) = args.partition {
+            vec![p]
+        } else {
+            // Get all partitions for the topic
+            admin.refresh_metadata().await?;
+            let metadata = client.metadata();
+            let tm = metadata
+                .get_topic(&args.topic)
+                .await
+                .ok_or_else(|| format!("Topic '{}' not found", args.topic))?;
+            tm.partitions.iter().map(|p| p.partition_index).collect()
+        };
 
-    output::print_ok(format!(
-        "Consuming from '{}' (group: {}, offset: {})",
-        args.topic, group, args.offset
-    ));
+        consumer
+            .assign(&args.topic, partitions)
+            .await
+            .map_err(|e| format!("Failed to assign: {e}"))?;
+
+        output::print_ok(format!(
+            "Consuming from '{}' (direct assign, offset: {})",
+            args.topic, args.offset
+        ));
+    } else {
+        consumer
+            .subscribe(vec![args.topic.clone()])
+            .await
+            .map_err(|e| format!("Failed to subscribe: {e}"))?;
+
+        output::print_ok(format!(
+            "Consuming from '{}' (group: {}, offset: {})",
+            args.topic, group_id, args.offset
+        ));
+    }
 
     let pretty_output = args.output == OutputFormat::Pretty;
     let tail = args.tail;
@@ -64,10 +96,11 @@ async fn consume_impl(args: ConsumeArgs, admin: AdminClient) -> CliResult<()> {
 
                 for r in records {
                     if let Some(n) = tail
-                        && consumed >= n {
-                            admin.close().await?;
-                            return Ok(());
-                        }
+                        && consumed >= n
+                    {
+                        admin.close().await?;
+                        return Ok(());
+                    }
 
                     if pretty_output {
                         let record_json = serde_json::json!({

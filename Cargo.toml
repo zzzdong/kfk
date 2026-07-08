@@ -1,6 +1,6 @@
 [package]
 name = "kfk"
-version = "0.1.4"
+version = "0.1.5"
 edition = "2024"
 rust-version = "1.92"
 authors = ["zzzdong <kuwater@163.com>"]
@@ -14,7 +14,7 @@ keywords = ["kafka", "cli", "kafka-client", "kafka-admin"]
 categories = ["command-line-utilities", "database"]
 
 [dependencies]
-kafka_client = "0.3.0"
+kafka_client = "0.4.0"
 clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
 serde = { version = "1", features = ["derive"] }
