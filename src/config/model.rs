@@ -64,6 +64,24 @@ pub struct SaslConfig {
     pub mechanism: SaslMechanism,
     pub username: String,
     pub password: String,
+    /// Keytab file path (for GSSAPI/Kerberos authentication)
+    #[serde(default)]
+    pub keytab: Option<String>,
+    /// KDC host (for GSSAPI authentication)
+    #[serde(default)]
+    pub kdc_host: Option<String>,
+    /// KDC port (for GSSAPI authentication, default: 88)
+    #[serde(default)]
+    pub kdc_port: Option<u16>,
+    /// Broker hostname for Kerberos service principal (for GSSAPI authentication)
+    #[serde(default)]
+    pub broker_hostname: Option<String>,
+    /// Kerberos service name (for GSSAPI authentication, default: kafka)
+    #[serde(default)]
+    pub service_name: Option<String>,
+    /// Kerberos realm (for GSSAPI authentication, extracted from principal if not set)
+    #[serde(default)]
+    pub realm: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, clap::ValueEnum)]
@@ -72,6 +90,8 @@ pub enum SaslMechanism {
     Plain,
     ScramSha256,
     ScramSha512,
+    /// SASL/GSSAPI (Kerberos) authentication
+    Gssapi,
 }
 
 impl std::fmt::Display for SaslMechanism {
@@ -80,6 +100,7 @@ impl std::fmt::Display for SaslMechanism {
             Self::Plain => write!(f, "PLAIN"),
             Self::ScramSha256 => write!(f, "SCRAM-SHA-256"),
             Self::ScramSha512 => write!(f, "SCRAM-SHA-512"),
+            Self::Gssapi => write!(f, "GSSAPI"),
         }
     }
 }

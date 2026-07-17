@@ -1,9 +1,11 @@
 use std::time::Duration;
 
-use kafka_client::SaslMechanismType;
-use kafka_client::{AutoOffsetReset, Client, ConsumerConfig, ProducerConfig, TlsConfig};
+use kafka_client::{
+    AutoOffsetReset, Client, ClientBuilder, ConsumerConfig, KerberosCredentials, ProducerConfig,
+    SaslMechanismType, TlsConfig,
+};
 
-use crate::config::{ClusterConfig, SecurityProtocolType};
+use crate::config::{ClusterConfig, SaslMechanism, SecurityProtocolType};
 
 use super::CliResult;
 
@@ -13,7 +15,7 @@ pub async fn create_client(config: &ClusterConfig) -> CliResult<Client> {
         .with_client_id("kfk-cli")
         .with_metadata_ttl(Duration::from_secs(30));
 
-    let builder = apply_security(builder, config)?;
+    let builder = config.apply_to_builder(builder)?;
 
     builder
         .build()
@@ -21,26 +23,52 @@ pub async fn create_client(config: &ClusterConfig) -> CliResult<Client> {
         .map_err(|e| format!("Failed to connect: {e}"))
 }
 
-fn apply_security(
-    builder: kafka_client::ClientBuilder,
-    config: &ClusterConfig,
-) -> CliResult<kafka_client::ClientBuilder> {
-    Ok(match config.security_protocol {
-        SecurityProtocolType::Plaintext => builder.with_plaintext(),
-        SecurityProtocolType::Ssl => {
-            let tls_cfg = build_kafka_tls_config(&config.tls);
-            builder.with_tls_config(tls_cfg)
-        }
-        SecurityProtocolType::SaslPlaintext => {
-            let (mechanism, username, password) = require_sasl_creds(&config.sasl)?;
-            builder.with_sasl(mechanism, username, password)
-        }
-        SecurityProtocolType::SaslSsl => {
-            let tls_cfg = build_kafka_tls_config(&config.tls);
-            let (mechanism, username, password) = require_sasl_creds(&config.sasl)?;
-            builder.with_sasl_tls(tls_cfg, mechanism, username, password)
-        }
-    })
+impl ClusterConfig {
+    /// Apply this cluster's security configuration to a [`ClientBuilder`].
+    pub fn apply_to_builder(&self, builder: ClientBuilder) -> CliResult<ClientBuilder> {
+        Ok(match &self.security_protocol {
+            SecurityProtocolType::Plaintext => builder.with_plaintext(),
+            SecurityProtocolType::Ssl => {
+                let tls_cfg = build_kafka_tls_config(&self.tls);
+                builder.with_tls_config(tls_cfg)
+            }
+            SecurityProtocolType::SaslPlaintext => {
+                let sasl = require_sasl_config(&self.sasl)?;
+                if sasl.mechanism == SaslMechanism::Gssapi {
+                    let creds = build_kerberos_credentials(sasl)?;
+                    let mut builder = builder.with_kerberos(creds);
+                    if let Some(kdc) = &sasl.kdc_host {
+                        builder = builder.with_kdc(kdc.clone(), sasl.kdc_port.unwrap_or(88));
+                    }
+                    if let Some(hostname) = &sasl.broker_hostname {
+                        builder = builder.with_broker_hostname(hostname.clone());
+                    }
+                    builder
+                } else {
+                    let (mechanism, username, password) = require_sasl_creds(sasl)?;
+                    builder.with_sasl(mechanism, username, password)
+                }
+            }
+            SecurityProtocolType::SaslSsl => {
+                let tls_cfg = build_kafka_tls_config(&self.tls);
+                let sasl = require_sasl_config(&self.sasl)?;
+                if sasl.mechanism == SaslMechanism::Gssapi {
+                    let creds = build_kerberos_credentials(sasl)?;
+                    let mut builder = builder.with_kerberos_tls(tls_cfg, creds);
+                    if let Some(kdc) = &sasl.kdc_host {
+                        builder = builder.with_kdc(kdc.clone(), sasl.kdc_port.unwrap_or(88));
+                    }
+                    if let Some(hostname) = &sasl.broker_hostname {
+                        builder = builder.with_broker_hostname(hostname.clone());
+                    }
+                    builder
+                } else {
+                    let (mechanism, username, password) = require_sasl_creds(sasl)?;
+                    builder.with_sasl_tls(tls_cfg, mechanism, username, password)
+                }
+            }
+        })
+    }
 }
 
 /// Create a consumer with given group_id and offset strategy.
@@ -83,12 +111,10 @@ pub async fn create_producer(client: &Client) -> kafka_client::Producer {
 }
 
 /// Map our config TLS to kafka_client TlsConfig
-#[allow(deprecated)]
 fn build_kafka_tls_config(tls: &Option<crate::config::TlsConfig>) -> TlsConfig {
     match tls {
         Some(cfg) => TlsConfig {
-            verify_certificate: !cfg.insecure,
-            domain: cfg.cert_file.as_deref().unwrap_or("localhost").to_string(),
+            domain: "localhost".to_string(),
             ca_cert_path: cfg.ca_file.clone(),
             client_cert_path: cfg.cert_file.clone(),
             client_key_path: cfg.key_file.clone(),
@@ -101,16 +127,48 @@ fn build_kafka_tls_config(tls: &Option<crate::config::TlsConfig>) -> TlsConfig {
 }
 
 /// Extract SASL credentials or return an error
-fn require_sasl_creds(
+fn require_sasl_config(
     sasl: &Option<crate::config::SaslConfig>,
-) -> Result<(SaslMechanismType, &str, &str), String> {
-    let sasl = sasl.as_ref().ok_or_else(|| {
+) -> Result<&crate::config::SaslConfig, String> {
+    sasl.as_ref().ok_or_else(|| {
         "SASL credentials required but not provided (--sasl-username / --sasl-password)".to_string()
-    })?;
+    })
+}
+
+/// Extract SASL username/password credentials for PLAIN/SCRAM mechanisms
+fn require_sasl_creds(
+    sasl: &crate::config::SaslConfig,
+) -> Result<(SaslMechanismType, &str, &str), String> {
     let mechanism = match sasl.mechanism {
-        crate::config::SaslMechanism::Plain => SaslMechanismType::Plain,
-        crate::config::SaslMechanism::ScramSha256 => SaslMechanismType::ScramSha256,
-        crate::config::SaslMechanism::ScramSha512 => SaslMechanismType::ScramSha512,
+        SaslMechanism::Plain => SaslMechanismType::Plain,
+        SaslMechanism::ScramSha256 => SaslMechanismType::ScramSha256,
+        SaslMechanism::ScramSha512 => SaslMechanismType::ScramSha512,
+        SaslMechanism::Gssapi => {
+            return Err(
+                "GSSAPI mechanism should be handled via Kerberos credentials, not SASL creds"
+                    .to_string(),
+            );
+        }
     };
     Ok((mechanism, &sasl.username, &sasl.password))
+}
+
+/// Build KerberosCredentials from SASL config for GSSAPI authentication
+fn build_kerberos_credentials(
+    sasl: &crate::config::SaslConfig,
+) -> Result<KerberosCredentials, String> {
+    let mut creds = KerberosCredentials::new(&sasl.username);
+    if let Some(keytab) = &sasl.keytab {
+        creds = creds.with_keytab(keytab);
+    }
+    if let Some(service_name) = &sasl.service_name {
+        creds = creds.with_service_name(service_name);
+    }
+    if let Some(realm) = &sasl.realm {
+        creds = creds.with_realm(realm);
+    }
+    if let Some(hostname) = &sasl.broker_hostname {
+        creds = creds.with_broker_hostname(hostname);
+    }
+    Ok(creds)
 }

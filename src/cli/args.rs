@@ -1,4 +1,4 @@
-use crate::config::{SaslMechanism, SecurityProtocolType};
+use crate::config::{SaslConfig, SaslMechanism, SecurityProtocolType, TlsConfig};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
 /// Output format for consume command
@@ -51,37 +51,8 @@ pub struct Cli {
     #[arg(long, value_enum, default_value_t = SecurityProtocolType::Plaintext)]
     pub security_protocol: SecurityProtocolType,
 
-    /// SASL mechanism
-    #[arg(long, value_enum)]
-    pub sasl_mechanism: Option<SaslMechanism>,
-
-    /// SASL username
-    #[arg(long)]
-    pub sasl_username: Option<String>,
-
-    /// SASL password
-    #[arg(long)]
-    pub sasl_password: Option<String>,
-
-    /// Enable TLS
-    #[arg(long)]
-    pub tls: bool,
-
-    /// TLS CA file path
-    #[arg(long)]
-    pub tls_ca: Option<String>,
-
-    /// TLS cert file path
-    #[arg(long)]
-    pub tls_cert: Option<String>,
-
-    /// TLS key file path
-    #[arg(long)]
-    pub tls_key: Option<String>,
-
-    /// Disable TLS certificate verification (insecure)
-    #[arg(long)]
-    pub tls_insecure: bool,
+    #[command(flatten)]
+    pub connection: Box<KafkaConnectionArgs>,
 
     #[command(subcommand)]
     pub command: Commands,
@@ -191,6 +162,105 @@ pub struct ConsumeArgs {
     pub tail: Option<usize>,
 }
 
+/// Unified Kafka connection arguments shared by global CLI and `add-cluster`.
+///
+/// Used via `#[command(flatten)]` in both [`Cli`] and [`ConfigAction::AddCluster`].
+#[derive(Args, Debug, Clone)]
+pub struct KafkaConnectionArgs {
+    /// SASL mechanism
+    #[arg(long, value_enum)]
+    pub sasl_mechanism: Option<SaslMechanism>,
+
+    /// SASL username (or Kerberos principal for GSSAPI)
+    #[arg(long)]
+    pub sasl_username: Option<String>,
+
+    /// SASL password (not required for GSSAPI)
+    #[arg(long)]
+    pub sasl_password: Option<String>,
+
+    /// Keytab file path (for GSSAPI/Kerberos authentication)
+    #[arg(long)]
+    pub sasl_keytab: Option<String>,
+
+    /// KDC host (for GSSAPI authentication)
+    #[arg(long)]
+    pub kdc_host: Option<String>,
+
+    /// KDC port (for GSSAPI authentication, default: 88)
+    #[arg(long, default_value_t = 88)]
+    pub kdc_port: u16,
+
+    /// Broker hostname for Kerberos service principal (for GSSAPI authentication)
+    #[arg(long)]
+    pub broker_hostname: Option<String>,
+
+    /// Kerberos service name (for GSSAPI authentication, default: kafka)
+    #[arg(long)]
+    pub sasl_service_name: Option<String>,
+
+    /// Kerberos realm (for GSSAPI authentication, extracted from principal if not set)
+    #[arg(long)]
+    pub sasl_realm: Option<String>,
+
+    /// Enable TLS
+    #[arg(long)]
+    pub tls: bool,
+
+    /// TLS CA file path
+    #[arg(long)]
+    pub tls_ca: Option<String>,
+
+    /// TLS cert file path
+    #[arg(long)]
+    pub tls_cert: Option<String>,
+
+    /// TLS key file path
+    #[arg(long)]
+    pub tls_key: Option<String>,
+
+    /// Disable TLS certificate verification (insecure)
+    #[arg(long)]
+    pub tls_insecure: bool,
+}
+
+impl KafkaConnectionArgs {
+    /// Build `SaslConfig` from CLI args. Returns `None` if no mechanism provided.
+    pub fn build_sasl_config(&self) -> Option<SaslConfig> {
+        let mechanism = self.sasl_mechanism.as_ref()?;
+        let username = self.sasl_username.as_ref()?;
+        let password = if *mechanism == SaslMechanism::Gssapi {
+            self.sasl_password.clone().unwrap_or_default()
+        } else {
+            self.sasl_password.clone()?
+        };
+        Some(SaslConfig {
+            mechanism: mechanism.clone(),
+            username: username.clone(),
+            password,
+            keytab: self.sasl_keytab.clone(),
+            kdc_host: self.kdc_host.clone(),
+            kdc_port: Some(self.kdc_port),
+            broker_hostname: self.broker_hostname.clone(),
+            service_name: self.sasl_service_name.clone(),
+            realm: self.sasl_realm.clone(),
+        })
+    }
+
+    /// Build `TlsConfig` from CLI args. Returns `None` if TLS is not enabled.
+    pub fn build_tls_config(&self) -> Option<TlsConfig> {
+        if !self.tls {
+            return None;
+        }
+        Some(TlsConfig {
+            insecure: self.tls_insecure,
+            ca_file: self.tls_ca.clone(),
+            cert_file: self.tls_cert.clone(),
+            key_file: self.tls_key.clone(),
+        })
+    }
+}
+
 #[derive(Subcommand, Debug, Clone)]
 pub enum ConfigAction {
     /// Add a new cluster configuration
@@ -206,33 +276,8 @@ pub enum ConfigAction {
         #[arg(long, value_enum, default_value_t = SecurityProtocolType::Plaintext)]
         security_protocol: SecurityProtocolType,
 
-        /// SASL mechanism
-        #[arg(long, value_enum)]
-        sasl_mechanism: Option<SaslMechanism>,
-
-        /// SASL username
-        #[arg(long)]
-        sasl_username: Option<String>,
-
-        /// SASL password
-        #[arg(long)]
-        sasl_password: Option<String>,
-
-        /// Enable TLS
-        #[arg(long)]
-        tls: bool,
-
-        /// TLS CA file path
-        #[arg(long)]
-        tls_ca: Option<String>,
-
-        /// TLS cert file path
-        #[arg(long)]
-        tls_cert: Option<String>,
-
-        /// TLS key file path
-        #[arg(long)]
-        tls_key: Option<String>,
+        #[command(flatten)]
+        auth_args: Box<KafkaConnectionArgs>,
     },
 
     /// Remove a cluster configuration

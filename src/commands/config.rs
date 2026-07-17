@@ -1,16 +1,6 @@
-use crate::cli::args::ConfigAction;
+use crate::cli::args::{ConfigAction, KafkaConnectionArgs};
 use crate::cli::output;
-use crate::config::{
-    ClusterConfig, SaslConfig, SaslMechanism, SecurityProtocolType, TlsConfig, load_config,
-    save_config,
-};
-
-struct TlsCliArgs {
-    enabled: bool,
-    ca: Option<String>,
-    cert: Option<String>,
-    key: Option<String>,
-}
+use crate::config::{ClusterConfig, SecurityProtocolType, TlsConfig, load_config, save_config};
 
 pub async fn handle_config(action: ConfigAction) {
     match action {
@@ -18,27 +8,8 @@ pub async fn handle_config(action: ConfigAction) {
             name,
             brokers,
             security_protocol,
-            sasl_mechanism,
-            sasl_username,
-            sasl_password,
-            tls,
-            tls_ca,
-            tls_cert,
-            tls_key,
-        } => add_cluster(
-            &name,
-            &brokers,
-            security_protocol,
-            sasl_mechanism,
-            sasl_username,
-            sasl_password,
-            TlsCliArgs {
-                enabled: tls,
-                ca: tls_ca,
-                cert: tls_cert,
-                key: tls_key,
-            },
-        ),
+            auth_args,
+        } => add_cluster(&name, &brokers, security_protocol, &auth_args),
         ConfigAction::RemoveCluster { name } => remove_cluster(&name),
         ConfigAction::SelectCluster { name } => select_cluster(&name),
         ConfigAction::List => list_clusters(),
@@ -49,31 +20,22 @@ fn add_cluster(
     name: &str,
     brokers: &str,
     security_protocol: SecurityProtocolType,
-    sasl_mechanism: Option<SaslMechanism>,
-    sasl_username: Option<String>,
-    sasl_password: Option<String>,
-    tls: TlsCliArgs,
+    auth_args: &KafkaConnectionArgs,
 ) {
     let mut config = load_config();
 
-    let sasl = match (sasl_mechanism, sasl_username, sasl_password) {
-        (Some(m), Some(u), Some(p)) => Some(SaslConfig {
-            mechanism: m,
-            username: u,
-            password: p,
-        }),
-        _ => None,
-    };
+    let sasl = auth_args.build_sasl_config();
 
-    let tls_cfg = if tls.enabled
+    let tls_cfg = if auth_args.tls
         || security_protocol == SecurityProtocolType::Ssl
         || security_protocol == SecurityProtocolType::SaslSsl
     {
+        // For saved config, always use secure TLS (insecure is a runtime-only concern)
         Some(TlsConfig {
             insecure: false,
-            ca_file: tls.ca,
-            cert_file: tls.cert,
-            key_file: tls.key,
+            ca_file: auth_args.tls_ca.clone(),
+            cert_file: auth_args.tls_cert.clone(),
+            key_file: auth_args.tls_key.clone(),
         })
     } else {
         None

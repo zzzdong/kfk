@@ -6,7 +6,6 @@ mod config;
 use clap::Parser;
 use cli::args::{Cli, Commands, ConfigAction, GroupAction, NodeAction, TopicAction};
 use client::{AdminClient, create_client};
-use config::ClusterCliParams;
 use config::resolve_cluster;
 
 #[tokio::main]
@@ -46,24 +45,16 @@ async fn main() {
     }
 
     // Build cluster connection for commands that need it
-    let cli_params = ClusterCliParams {
-        security_protocol: cli.security_protocol,
-        mechanism: cli.sasl_mechanism,
-        username: cli.sasl_username,
-        password: cli.sasl_password,
-        tls_enabled: cli.tls,
-        tls_ca: cli.tls_ca,
-        tls_cert: cli.tls_cert,
-        tls_key: cli.tls_key,
-        tls_insecure: cli.tls_insecure,
-    };
-
-    let (_, cluster_cfg) =
-        resolve_cluster(cli.cluster.as_deref(), cli.brokers.as_deref(), &cli_params)
-            .unwrap_or_else(|e| {
-                eprintln!("ERROR: {e}");
-                std::process::exit(1);
-            });
+    let (_, cluster_cfg) = resolve_cluster(
+        cli.cluster.as_deref(),
+        cli.brokers.as_deref(),
+        &cli.connection,
+        &cli.security_protocol,
+    )
+    .unwrap_or_else(|e| {
+        eprintln!("ERROR: {e}");
+        std::process::exit(1);
+    });
 
     let client = create_client(&cluster_cfg).await.unwrap_or_else(|e| {
         eprintln!("ERROR: {e}");
