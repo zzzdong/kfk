@@ -296,6 +296,34 @@ impl AdminClient {
         })
     }
 
+    /// Fetch committed offsets and lag for a consumer group.
+    ///
+    /// Returns one entry per topic-partition the group has committed an offset
+    /// for. The high-watermark (log-end offset) is resolved for each partition
+    /// so the lag can be computed; it is `-1` when it cannot be determined.
+    pub async fn fetch_group_offsets(&self, group_id: &str) -> CliResult<Vec<GroupOffsetInfo>> {
+        let resp = self
+            .client()
+            .admin()
+            .fetch_group_offsets(group_id)
+            .await
+            .map_err(|e| format!("Failed to fetch offsets for group '{group_id}': {e}"))?;
+
+        let offsets = resp
+            .into_iter()
+            .map(|o| GroupOffsetInfo {
+                group: group_id.to_string(),
+                topic: o.topic,
+                partition: o.partition,
+                committed_offset: o.committed_offset,
+                log_end_offset: o.log_end_offset,
+                lag: o.lag,
+                metadata: o.metadata,
+            })
+            .collect();
+        Ok(offsets)
+    }
+
     /// Close the client
     pub async fn close(self) -> CliResult<()> {
         self.client

@@ -225,11 +225,24 @@ pub struct KafkaConnectionArgs {
 }
 
 impl KafkaConnectionArgs {
-    /// Build `SaslConfig` from CLI args. Returns `None` if no mechanism provided.
+    /// Build `SaslConfig` from CLI args.
+    ///
+    /// Returns `None` unless authentication can be determined: explicitly set
+    /// `sasl_mechanism`, or both `sasl_username` and `sasl_password` provided
+    /// (in which case `sasl_mechanism` defaults to `Plain`).
     pub fn build_sasl_config(&self) -> Option<SaslConfig> {
-        let mechanism = self.sasl_mechanism.as_ref()?;
+        let mechanism = match self.sasl_mechanism.clone() {
+            Some(m) => m,
+            None => {
+                if self.sasl_username.is_some() && self.sasl_password.is_some() {
+                    SaslMechanism::Plain
+                } else {
+                    return None;
+                }
+            }
+        };
         let username = self.sasl_username.as_ref()?;
-        let password = if *mechanism == SaslMechanism::Gssapi {
+        let password = if mechanism == SaslMechanism::Gssapi {
             self.sasl_password.clone().unwrap_or_default()
         } else {
             self.sasl_password.clone()?
@@ -330,6 +343,16 @@ pub enum GroupAction {
     Describe {
         /// Group ID
         group: String,
+    },
+
+    /// Show committed offsets and lag for consumer group(s)
+    Offsets {
+        /// Group ID (omit to show offsets for all groups)
+        group: Option<String>,
+
+        /// Only show offsets for this topic
+        #[arg(short = 't', long)]
+        topic: Option<String>,
     },
 
     /// Commit/reset offset for a consumer group

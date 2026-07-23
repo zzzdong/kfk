@@ -14,6 +14,7 @@ pub async fn handle_group(action: GroupAction, admin: AdminClient) {
             partition,
             all_partitions,
         } => commit_offset(&group, &topic, &offset, partition, all_partitions, admin).await,
+        GroupAction::Offsets { group, topic } => show_offsets(group, topic, admin).await,
         GroupAction::Delete { group } => delete_group(&group, admin).await,
     };
 
@@ -118,6 +119,46 @@ async fn delete_group(group: &str, admin: AdminClient) -> CliResult<()> {
     Ok(())
 }
 
+async fn show_offsets(
+    group: Option<String>,
+    topic: Option<String>,
+    admin: AdminClient,
+) -> CliResult<()> {
+    let mut offsets = match group {
+        Some(ref g) => admin.fetch_group_offsets(g).await?,
+        None => {
+            let groups = admin.list_groups().await?;
+            let mut collected = Vec::new();
+            for g in groups {
+                match admin.fetch_group_offsets(&g.group_id).await {
+                    Ok(mut offs) => collected.append(&mut offs),
+                    Err(e) => eprintln!("Warning: skipping group '{}': {e}", g.group_id),
+                }
+            }
+            collected
+        }
+    };
+    admin.close().await?;
+
+    if let Some(t) = &topic {
+        offsets.retain(|o| &o.topic == t);
+    }
+
+    if offsets.is_empty() {
+        let group_desc = group
+            .map(|g| format!(" for group '{g}'"))
+            .unwrap_or_else(|| " for any group".to_string());
+        let scope = topic
+            .map(|t| format!(" on topic '{t}'"))
+            .unwrap_or_default();
+        output::print_msg(format!("No committed offsets found{group_desc}{scope}"));
+        return Ok(());
+    }
+
+    output::print_items(&offsets, output::OutputFormat::Table);
+    Ok(())
+}
+
 impl TableRow for crate::client::GroupInfo {
     fn headers(&self) -> Vec<String> {
         vec![
@@ -148,6 +189,41 @@ impl TableRow for crate::client::GroupMember {
             self.member_id.clone(),
             self.client_id.clone(),
             self.client_host.clone(),
+        ]
+    }
+}
+
+impl TableRow for crate::client::GroupOffsetInfo {
+    fn headers(&self) -> Vec<String> {
+        vec![
+            "GROUP".to_string(),
+            "TOPIC".to_string(),
+            "PARTITION".to_string(),
+            "COMMITTED".to_string(),
+            "LOG-END".to_string(),
+            "LAG".to_string(),
+            "METADATA".to_string(),
+        ]
+    }
+    fn row(&self) -> Vec<String> {
+        let log_end = if self.log_end_offset < 0 {
+            "-".to_string()
+        } else {
+            self.log_end_offset.to_string()
+        };
+        let lag = if self.lag < 0 {
+            "-".to_string()
+        } else {
+            self.lag.to_string()
+        };
+        vec![
+            self.group.clone(),
+            self.topic.clone(),
+            self.partition.to_string(),
+            self.committed_offset.to_string(),
+            log_end,
+            lag,
+            self.metadata.clone(),
         ]
     }
 }

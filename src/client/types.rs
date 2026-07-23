@@ -57,6 +57,18 @@ pub struct GroupMember {
     pub assignment: Vec<TopicPartition>,
 }
 
+/// Committed offset (and lag) for a single topic-partition of a group.
+#[derive(Debug, Clone, Serialize)]
+pub struct GroupOffsetInfo {
+    pub group: String,
+    pub topic: String,
+    pub partition: i32,
+    pub committed_offset: i64,
+    pub log_end_offset: i64,
+    pub lag: i64,
+    pub metadata: String,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct TopicPartition {
     pub topic: String,
