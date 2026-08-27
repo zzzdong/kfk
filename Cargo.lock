@@ -758,7 +758,7 @@ dependencies = [
 
 [[package]]
 name = "kfk"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "bytes",
  "clap",
