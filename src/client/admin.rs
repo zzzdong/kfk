@@ -1,11 +1,7 @@
+use kafka_client::protocol::CreateTopicsRequest;
 use kafka_client::protocol::create_topics_request::CreatableTopic;
 use kafka_client::protocol::delete_topics_request::{DeleteTopicState, DeleteTopicsRequest};
-use kafka_client::protocol::{
-    CreateTopicsRequest, DescribeGroupsRequest, DescribeGroupsResponse, FindCoordinatorRequest,
-    FindCoordinatorResponse, ListGroupsRequest, ListGroupsResponse,
-};
 use kafka_client::{Client, Producer, ProducerConfig};
-use std::time::Duration;
 
 use super::CliResult;
 use super::types::*;
@@ -196,83 +192,41 @@ impl AdminClient {
 
     /// List all consumer groups
     pub async fn list_groups(&self) -> CliResult<Vec<GroupInfo>> {
-        let req = ListGroupsRequest {
-            states_filter: vec![],
-            types_filter: vec![],
-        };
+        // kafka_client now queries every broker (a broker only reports the
+        // groups it coordinates) and merges the results.
+        let groups = self
+            .client
+            .admin()
+            .list_groups()
+            .await
+            .map_err(|e| format!("Failed to list groups: {e}"))?;
 
-        let resp: ListGroupsResponse = self.send_to_any(&req).await?;
-
-        let mut groups: Vec<GroupInfo> = resp
-            .groups
+        let mut result: Vec<GroupInfo> = groups
             .into_iter()
             .map(|g| GroupInfo {
                 group_id: g.group_id,
                 protocol: g.protocol_type,
-                state: g.group_state,
+                state: g.state,
                 members: 0,
             })
             .collect();
-        groups.sort_by(|a, b| a.group_id.cmp(&b.group_id));
-        Ok(groups)
+        result.sort_by(|a, b| a.group_id.cmp(&b.group_id));
+        Ok(result)
     }
 
     /// Describe a consumer group
     pub async fn describe_group(&self, group_id: &str) -> CliResult<GroupDetail> {
-        let mut retries = 0u32;
-        let max_retries = 30u32;
-        let coord_resp: FindCoordinatorResponse = loop {
-            retries += 1;
-            if retries > max_retries {
-                return Err("Group coordinator not available after retries".to_string());
-            }
-            let req = FindCoordinatorRequest {
-                key: group_id.to_string(),
-                key_type: 0,
-                coordinator_keys: vec![group_id.to_string()],
-            };
-            let resp: FindCoordinatorResponse = self.send_to_any(&req).await?;
+        // kafka_client routes DescribeGroups to the group's coordinator and
+        // checks the per-group error code, so non-coordinator brokers no
+        // longer produce empty/incomplete descriptions.
+        let descriptions = self
+            .client
+            .admin()
+            .describe_groups(&[group_id])
+            .await
+            .map_err(|e| format!("Failed to describe group '{group_id}': {e}"))?;
 
-            // error_code 15 = GROUP_COORDINATOR_NOT_AVAILABLE (retryable)
-            if resp.error_code == 15 {
-                tokio::time::sleep(Duration::from_millis(500)).await;
-                continue;
-            }
-            if let Some(coord) = resp.coordinators.first()
-                && coord.error_code == 15
-            {
-                tokio::time::sleep(Duration::from_millis(500)).await;
-                continue;
-            }
-            break resp;
-        };
-
-        // For v4+ responses, host/port are in coordinators array
-        let (node_id, host, port) = if !coord_resp.host.is_empty() {
-            (coord_resp.node_id, coord_resp.host.clone(), coord_resp.port)
-        } else if let Some(coord) = coord_resp.coordinators.first() {
-            (coord.node_id, coord.host.clone(), coord.port)
-        } else {
-            return Err("Failed to find group coordinator".to_string());
-        };
-
-        let coordinator = Some(BrokerInfo {
-            id: node_id,
-            host,
-            port,
-            rack: None,
-            is_controller: false,
-        });
-
-        let req = DescribeGroupsRequest {
-            groups: vec![group_id.to_string()],
-            include_authorized_operations: false,
-        };
-
-        let resp: DescribeGroupsResponse = self.send_to_any(&req).await?;
-
-        let group = resp
-            .groups
+        let group = descriptions
             .into_iter()
             .next()
             .ok_or_else(|| format!("Group '{group_id}' not found"))?;
@@ -289,9 +243,9 @@ impl AdminClient {
             .collect();
 
         Ok(GroupDetail {
-            group_id: group_id.to_string(),
-            state: group.group_state,
-            coordinator,
+            group_id: group.group_id,
+            state: group.state,
+            coordinator: None,
             members,
         })
     }

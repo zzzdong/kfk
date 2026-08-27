@@ -144,6 +144,9 @@ async fn show_offsets(
         offsets.retain(|o| &o.topic == t);
     }
 
+    offsets
+        .sort_by(|a, b| (&a.group, &a.topic, a.partition).cmp(&(&b.group, &b.topic, b.partition)));
+
     if offsets.is_empty() {
         let group_desc = group
             .map(|g| format!(" for group '{g}'"))
